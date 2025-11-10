@@ -42,14 +42,18 @@ echo.
 echo Cleaning all stale generated data
 echo.
 
-rmdir /S /Q bin
-rmdir /S /Q build
-rmdir /S /Q ffx-api\bin
-rmdir /S /Q ffx-api\build
-rmdir /S /Q sdk\bin
-rmdir /S /Q sdk\build
-rmdir /S /Q sdk\tools\ffx_shader_compiler\bin
-rmdir /S /Q sdk\tools\ffx_shader_compiler\build
+:: Define list of directories to clean
+set DIRS_TO_CLEAN=bin build ffx-api\bin ffx-api\build sdk\bin sdk\build sdk\tools\ffx_shader_compiler\bin sdk\tools\ffx_shader_compiler\build
+
+:: Loop through each directory and remove if it exists
+for %%d in (%DIRS_TO_CLEAN%) do (
+    if exist "%%d" (
+        echo Removing %%d...
+        rmdir /S /Q "%%d"
+    ) else (
+        echo %%d does not exist, skipping...
+    )
+)
 
 echo.
 echo Cleaning complete

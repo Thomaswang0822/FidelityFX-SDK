@@ -38,6 +38,45 @@ endif()
 
 project(FFX_API_${FFX_PLATFORM_NAME})
 
+# Include the common.cmake from root to use createConfig function
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/../..)
+include(common)
+
+# Set configuration types: use custom ones for dev mode, else standard
+if(FFX_DEV_API)
+    message(STATUS "Setting ffx-api configurations to match root project")
+    
+    if(FFX_PLATFORM_NAME STREQUAL "dx12")
+        set(CMAKE_CONFIGURATION_TYPES DebugDX12 ReleaseDX12 RelWithDebInfoDX12)
+        
+        # Use the createConfig function from root project
+        createConfig(DX12 DebugDX12 DEBUG)
+        createConfig(DX12 ReleaseDX12 RELEASE)
+        createConfig(DX12 RelWithDebInfoDX12 RELWITHDEBINFO)
+
+        # Set postfixes for custom configurations
+        set(CMAKE_DEBUGDX12_POSTFIX d)
+        set(CMAKE_RELWITHDEBINFODX12_POSTFIX drel)
+    elseif(FFX_PLATFORM_NAME STREQUAL "vk")
+        set(CMAKE_CONFIGURATION_TYPES DebugVK ReleaseVK RelWithDebInfoVK)
+        
+        createConfig(VK DebugVK DEBUG)
+        createConfig(VK ReleaseVK RELEASE)
+        createConfig(VK RelWithDebInfoVK RELWITHDEBINFO)
+
+        # Set postfixes for custom configurations
+        set(CMAKE_DEBUGVK_POSTFIX d)
+        set(CMAKE_RELWITHDEBINFOVK_POSTFIX drel)
+    endif()
+    
+    # Force the configuration types to be used
+    set(CMAKE_CONFIGURATION_TYPES "${CMAKE_CONFIGURATION_TYPES}" CACHE STRING "Configurations" FORCE)
+    message(STATUS "ffx-api configurations set to: ${CMAKE_CONFIGURATION_TYPES}")
+else()
+    # Original behavior: standard configurations
+    set(CMAKE_CONFIGURATION_TYPES Debug Release RelWithDebInfo)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -45,18 +84,32 @@ if (MSVC)
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} /W3")
 endif()
 
-set(CMAKE_CONFIGURATION_TYPES Debug Release RelWithDebInfo)
+# set(CMAKE_CONFIGURATION_TYPES Debug Release RelWithDebInfo)
 set(CMAKE_DEBUG_POSTFIX d)
 set(CMAKE_RELWITHDEBINFO_POSTFIX drel)
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_HOME_DIRECTORY}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_HOME_DIRECTORY}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_HOME_DIRECTORY}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_HOME_DIRECTORY}/bin)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_HOME_DIRECTORY}/bin)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_HOME_DIRECTORY}/bin)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_HOME_DIRECTORY}/bin)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_HOME_DIRECTORY}/bin)
+# Libs should be at another place if ffx-api is included in the solution
+if(FFX_DEV_API)
+    # Development mode: output to separate directory to avoid conflicts
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_HOME_DIRECTORY}/bin/ffx-api)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_HOME_DIRECTORY}/bin/ffx-api)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_HOME_DIRECTORY}/bin/ffx-api)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_HOME_DIRECTORY}/bin/ffx-api)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_HOME_DIRECTORY}/bin/ffx-api)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_HOME_DIRECTORY}/bin/ffx-api)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_HOME_DIRECTORY}/bin/ffx-api)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_HOME_DIRECTORY}/bin/ffx-api)
+else()
+    # Original behavior: output to main bin directory
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_HOME_DIRECTORY}/bin)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_HOME_DIRECTORY}/bin)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_HOME_DIRECTORY}/bin)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_HOME_DIRECTORY}/bin)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_HOME_DIRECTORY}/bin)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_HOME_DIRECTORY}/bin)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_HOME_DIRECTORY}/bin)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_HOME_DIRECTORY}/bin)
+endif()
 
 
 
@@ -132,14 +185,18 @@ target_include_directories(amd_fidelityfx_${FFX_PLATFORM_NAME} PRIVATE ${CMAKE_C
 
 # FSR dependency, must be built before using BuildFidelityFXSDK.bat
 
-set(FFX_FSR2 ON)
-set(FFX_FSR3 ON)
-set(FFX_FSR3UPSCALER ON)
-set(FFX_OF ON)
-set(FFX_FI ON)
-set(FFX_AUTO_COMPILE_SHADERS ON)
-set(FFX_BUILD_AS_DLL OFF)
-add_subdirectory(../sdk sdk)
+if(NOT FFX_DEV_API)
+    # Original behavior: build SDK as subdirectory when not in dev mode
+    set(FFX_FSR2 ON)
+    set(FFX_FSR3 ON)
+    set(FFX_FSR3UPSCALER ON)
+    set(FFX_OF ON)
+    set(FFX_FI ON)
+    set(FFX_AUTO_COMPILE_SHADERS ON)
+    set(FFX_BUILD_AS_DLL OFF)
+    add_subdirectory(../sdk sdk)
+endif()
+# In dev mode, we assume SDK is already built by the main solution
 
 target_link_libraries(amd_fidelityfx_${FFX_PLATFORM_NAME} PRIVATE ffx_fsr2_${CMAKE_GENERATOR_PLATFORM} ffx_fsr3upscaler_${CMAKE_GENERATOR_PLATFORM} ffx_opticalflow_${CMAKE_GENERATOR_PLATFORM} ffx_frameinterpolation_${CMAKE_GENERATOR_PLATFORM} DXGI)
 if (FFX_API_BACKEND STREQUAL VK_X64)

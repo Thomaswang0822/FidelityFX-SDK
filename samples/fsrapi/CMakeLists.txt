@@ -68,13 +68,19 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 						OUTPUT_NAME_RELWITHDEBINFOVK "${EXE_OUT_NAME}drelVK"
 						VS_DEBUGGER_WORKING_DIRECTORY "${BIN_OUTPUT}")
 
-file(GLOB api_dlls ${FFX_API_ROOTPATH}/*.dll)
+# Only copy DLLs in non-development mode (when using prebuilt DLLs)
+if(NOT FFX_DEV_API)
+    file(GLOB api_dlls ${FFX_API_ROOTPATH}/*.dll)
 
-# Copy amd_fidelityfx dll to output. Relies on it being built before this project is configured!
-# TODO: remove tech debt from build system....
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy_if_different
-	${api_dlls} ${BIN_OUTPUT})
+    # Copy amd_fidelityfx dll to output. Relies on it being built before this project is configured!
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${api_dlls} ${BIN_OUTPUT})
+        
+    message(STATUS "Copying ffx-api DLLs for non-development mode")
+else()
+    message(STATUS "Skipping DLL copy in development mode (static linking)")
+endif()
 
 # Add compile definitions to identify the sample
 target_compile_definitions(${PROJECT_NAME} PRIVATE SampleName=L"FidelityFX FSR FFXAPI v1.3"

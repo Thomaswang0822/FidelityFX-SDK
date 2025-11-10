@@ -31,12 +31,12 @@ project(FFX_BREADCRUMBS)
 add_library(ffx_breadcrumbs_native STATIC IMPORTED)
 set_target_properties(ffx_breadcrumbs_native PROPERTIES
 					  IMPORTED_CONFIGURATIONS "DebugDX12;DebugVK;RelWithDebInfoDX12;RelWithDebInfoVK;ReleaseDX12;ReleaseVK"
-					  IMPORTED_LOCATION_DEBUGDX12 "${SDK_ROOT}/bin/ffx_sdk/ffx_breadcrumbs_${CMAKE_GENERATOR_PLATFORM}d.lib"
-					  IMPORTED_LOCATION_DEBUGVK "${SDK_ROOT}/bin/ffx_sdk/ffx_breadcrumbs_${CMAKE_GENERATOR_PLATFORM}d.lib"
-					  IMPORTED_LOCATION_RELEASEDX12 "${SDK_ROOT}/bin/ffx_sdk/ffx_breadcrumbs_${CMAKE_GENERATOR_PLATFORM}.lib"
-					  IMPORTED_LOCATION_RELEASEVK "${SDK_ROOT}/bin/ffx_sdk/ffx_breadcrumbs_${CMAKE_GENERATOR_PLATFORM}.lib"
-					  IMPORTED_LOCATION_RELWITHDEBINFODX12 "${SDK_ROOT}/bin/ffx_sdk/ffx_breadcrumbs_${CMAKE_GENERATOR_PLATFORM}drel.lib"
-					  IMPORTED_LOCATION_RELWITHDEBINFOVK "${SDK_ROOT}/bin/ffx_sdk/ffx_breadcrumbs_${CMAKE_GENERATOR_PLATFORM}drel.lib")
+					  IMPORTED_LOCATION_DEBUGDX12 "${FFX_SDK_LIB_PATH}/ffx_breadcrumbs_${CMAKE_GENERATOR_PLATFORM}d.lib"
+					  IMPORTED_LOCATION_DEBUGVK "${FFX_SDK_LIB_PATH}/ffx_breadcrumbs_${CMAKE_GENERATOR_PLATFORM}d.lib"
+					  IMPORTED_LOCATION_RELEASEDX12 "${FFX_SDK_LIB_PATH}/ffx_breadcrumbs_${CMAKE_GENERATOR_PLATFORM}.lib"
+					  IMPORTED_LOCATION_RELEASEVK "${FFX_SDK_LIB_PATH}/ffx_breadcrumbs_${CMAKE_GENERATOR_PLATFORM}.lib"
+					  IMPORTED_LOCATION_RELWITHDEBINFODX12 "${FFX_SDK_LIB_PATH}/ffx_breadcrumbs_${CMAKE_GENERATOR_PLATFORM}drel.lib"
+					  IMPORTED_LOCATION_RELWITHDEBINFOVK "${FFX_SDK_LIB_PATH}/ffx_breadcrumbs_${CMAKE_GENERATOR_PLATFORM}drel.lib")
 
 # Breadcrumbs render module files
 file(GLOB breadcrumbs_src

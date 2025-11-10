@@ -86,7 +86,23 @@ else()
     message(FATAL_ERROR "Requested architecture ${CMAKE_GENERATOR_PLATFORM} not yet supported!)")
 endif()
 
-# Ouput exe to bin directory
+# If FFX_DEV_API, let targets under samples/ look for .lib under bin/ffx_sdk instead of sdk/bin/ffx_sdk
+if(FFX_DEV_API)
+    set(FFX_SDK_LIB_PATH "${BIN_OUTPUT}/ffx_sdk")
+else()
+    set(FFX_SDK_LIB_PATH "${SDK_ROOT}/bin/ffx_sdk")
+endif()
+set(FFX_SDK_LIB_PATH "${FFX_SDK_LIB_PATH}" CACHE PATH "FidelityFX SDK library path")
+
+# Similar thing for ffx-api/
+if(FFX_DEV_API)
+    set(FFX_API_LIB_PATH "${BIN_OUTPUT}/ffx-api")
+else()
+    set(FFX_API_LIB_PATH "${CMAKE_SOURCE_DIR}/ffx-api/bin")
+endif()
+set(FFX_API_LIB_PATH "${FFX_API_LIB_PATH}" CACHE PATH "FidelityFX API library path")
+
+# Output exe to bin directory
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${BIN_OUTPUT})
 foreach( OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES} )
     string( TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG )
@@ -98,22 +114,63 @@ if (RUNTIME_SHADER_RECOMPILE EQUAL 1)
     set(SUPPORT_RUNTIME_SHADER_RECOMPILE 1)
 endif()
 
-# Import backend libs
+# Since we have conditionally set ${FFX_SDK_LIB_PATH}, adding ffx_backend_native can be globally.
 add_library(ffx_backend_native STATIC IMPORTED)
 set_target_properties(ffx_backend_native PROPERTIES
-					  IMPORTED_CONFIGURATIONS "DebugDX12;DebugVK;RelWithDebInfoDX12;RelWithDebInfoVK;ReleaseDX12;ReleaseVK"
-					  IMPORTED_LOCATION_DEBUGDX12 "${SDK_ROOT}/bin/ffx_sdk/ffx_backend_dx12_${CMAKE_GENERATOR_PLATFORM}d.lib"
-					  IMPORTED_LOCATION_RELEASEDX12 "${SDK_ROOT}/bin/ffx_sdk/ffx_backend_dx12_${CMAKE_GENERATOR_PLATFORM}.lib"
-					  IMPORTED_LOCATION_RELWITHDEBINFODX12 "${SDK_ROOT}/bin/ffx_sdk/ffx_backend_dx12_${CMAKE_GENERATOR_PLATFORM}drel.lib"
-					  IMPORTED_LOCATION_DEBUGVK "${SDK_ROOT}/bin/ffx_sdk/ffx_backend_vk_${CMAKE_GENERATOR_PLATFORM}d.lib"
-					  IMPORTED_LOCATION_RELEASEVK "${SDK_ROOT}/bin/ffx_sdk/ffx_backend_vk_${CMAKE_GENERATOR_PLATFORM}.lib"
-					  IMPORTED_LOCATION_RELWITHDEBINFOVK "${SDK_ROOT}/bin/ffx_sdk/ffx_backend_vk_${CMAKE_GENERATOR_PLATFORM}drel.lib")
+                        IMPORTED_CONFIGURATIONS "DebugDX12;DebugVK;RelWithDebInfoDX12;RelWithDebInfoVK;ReleaseDX12;ReleaseVK"
+                        IMPORTED_LOCATION_DEBUGDX12 "${FFX_SDK_LIB_PATH}/ffx_backend_dx12_${CMAKE_GENERATOR_PLATFORM}d.lib"
+                        IMPORTED_LOCATION_RELEASEDX12 "${FFX_SDK_LIB_PATH}/ffx_backend_dx12_${CMAKE_GENERATOR_PLATFORM}.lib"
+                        IMPORTED_LOCATION_RELWITHDEBINFODX12 "${FFX_SDK_LIB_PATH}/ffx_backend_dx12_${CMAKE_GENERATOR_PLATFORM}drel.lib"
+                        IMPORTED_LOCATION_DEBUGVK "${FFX_SDK_LIB_PATH}/ffx_backend_vk_${CMAKE_GENERATOR_PLATFORM}d.lib"
+                        IMPORTED_LOCATION_RELEASEVK "${FFX_SDK_LIB_PATH}/ffx_backend_vk_${CMAKE_GENERATOR_PLATFORM}.lib"
+                        IMPORTED_LOCATION_RELWITHDEBINFOVK "${FFX_SDK_LIB_PATH}/ffx_backend_vk_${CMAKE_GENERATOR_PLATFORM}drel.lib")
 
-if (FFX_BUILD_AS_DLL)
-    file(GLOB SDK_DLLS "${SDK_ROOT}/bin/ffx_sdk/*.dll")
-    message(STATUS "Copying ${SDK_DLLS} to bin.")
-    copyTargetCommand("${SDK_DLLS}" ${CMAKE_HOME_DIRECTORY}/bin copied_sdk_dlls)
-    add_dependencies(ffx_backend_native copied_sdk_dlls)
+# Import backend libs - only if NOT in development mode
+if(NOT FFX_DEV_API)
+    message(STATUS "SDK source are delivered as prebuilt libs in solution")
+
+    if (FFX_BUILD_AS_DLL)
+        file(GLOB SDK_DLLS "${FFX_SDK_LIB_PATH}/*.dll")
+        message(STATUS "Copying ${SDK_DLLS} to bin.")
+        copyTargetCommand("${SDK_DLLS}" ${CMAKE_HOME_DIRECTORY}/bin copied_sdk_dlls)
+        add_dependencies(ffx_backend_native copied_sdk_dlls)
+    endif()
+else()
+    # In development mode, include SDK source in solution
+    message(STATUS "Including SDK source in solution (development mode)")
+
+    # Set FFX_API_BACKEND based on architecture and API
+    if(CAULDRON_DX12)
+        if(CMAKE_GENERATOR_PLATFORM STREQUAL x64)
+            set(FFX_API_BACKEND "DX12_X64")
+        elseif(CMAKE_GENERATOR_PLATFORM STREQUAL ARM64)
+            set(FFX_API_BACKEND "DX12_ARM64")
+        endif()
+    elseif(CAULDRON_VK)
+        if(CMAKE_GENERATOR_PLATFORM STREQUAL x64)
+            set(FFX_API_BACKEND "VK_X64")
+        elseif(CMAKE_GENERATOR_PLATFORM STREQUAL ARM64)
+            set(FFX_API_BACKEND "VK_ARM64")
+        endif()
+    endif()
+    message(STATUS "FFX_API_BACKEND set to: ${FFX_API_BACKEND}")
+
+    # Set the same options that ffx-api would normally set
+    set(FFX_FSR2 ON)
+    set(FFX_FSR3 ON)
+    set(FFX_FSR3UPSCALER ON)
+    set(FFX_OF ON)
+    set(FFX_FI ON)
+    set(FFX_AUTO_COMPILE_SHADERS ON)
+    set(FFX_BUILD_AS_DLL OFF)
+
+    add_subdirectory(sdk)
+endif()
+
+# Add ffx-api project when in development mode
+if(FFX_DEV_API)
+    message(STATUS "Adding ffx-api project to solution (development mode)")
+    add_subdirectory(ffx-api)
 endif()
 
 # Pull in cauldron

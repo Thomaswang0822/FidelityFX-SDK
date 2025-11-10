@@ -65,14 +65,18 @@ set(FFX_SRC_BACKENDS_PATH ${SDK_ROOT}/src/backends)
 
 #Setup pathing to FFX_API objects
 if (FFX_DEV_API)
-	set(FFX_API_ROOTPATH ${API_ROOT}/bin)
-	set(FFX_API_PATHNAME_DX12D 		${FFX_API_ROOTPATH}/amd_fidelityfx_dx12d)
-	set(FFX_API_PATHNAME_DX12DREL 	${FFX_API_ROOTPATH}/amd_fidelityfx_dx12drel)
-	set(FFX_API_PATHNAME_DX12 		${FFX_API_ROOTPATH}/amd_fidelityfx_dx12)
-	set(FFX_API_PATHNAME_VKD 		${FFX_API_ROOTPATH}/amd_fidelityfx_vkd)
-	set(FFX_API_PATHNAME_VKDREL 	${FFX_API_ROOTPATH}/amd_fidelityfx_vkdrel)
-	set(FFX_API_PATHNAME_VK 		${FFX_API_ROOTPATH}/amd_fidelityfx_vk)
+    message(STATUS "FFX_DEV_API is ENABLED - Building with development API from ${API_ROOT}")
+	
+    # Development mode: use configuration-specific subdirectories in bin/ffx-api
+    set(FFX_API_ROOTPATH ${BIN_OUTPUT}/ffx-api)
+    set(FFX_API_PATHNAME_DX12D 		${FFX_API_ROOTPATH}/DebugDX12/amd_fidelityfx_dx12d)
+    set(FFX_API_PATHNAME_DX12DREL 	${FFX_API_ROOTPATH}/RelWithDebInfoDX12/amd_fidelityfx_dx12drel)
+    set(FFX_API_PATHNAME_DX12 		${FFX_API_ROOTPATH}/ReleaseDX12/amd_fidelityfx_dx12)
+    set(FFX_API_PATHNAME_VKD 		${FFX_API_ROOTPATH}/DebugVK/amd_fidelityfx_vkd)
+    set(FFX_API_PATHNAME_VKDREL 	${FFX_API_ROOTPATH}/RelWithDebInfoVK/amd_fidelityfx_vkdrel)
+    set(FFX_API_PATHNAME_VK 		${FFX_API_ROOTPATH}/ReleaseVK/amd_fidelityfx_vk)
 else()
+    message(STATUS "FFX_DEV_API is DISABLED - Using prebuilt signed DLLs from ${PREBUILT_SIGNED_DLL_ROOT}")
 	set(FFX_API_ROOTPATH ${PREBUILT_SIGNED_DLL_ROOT})
 	set(FFX_API_PATHNAME_DX12D 		${FFX_API_ROOTPATH}/amd_fidelityfx_dx12)
 	set(FFX_API_PATHNAME_DX12DREL 	${FFX_API_ROOTPATH}/amd_fidelityfx_dx12)
@@ -133,14 +137,17 @@ function(copyCommand list dest)
     foreach(fullFileName ${list})
         get_filename_component(file ${fullFileName} NAME)
         message("Generating custom command for ${fullFileName}")
-        add_custom_command(
-            OUTPUT   ${dest}/${file}
-            PRE_BUILD
+        
+        # Use custom target approach to avoid duplication conflicts
+        add_custom_target(copy_${file} ALL
             COMMAND ${CMAKE_COMMAND} -E make_directory ${dest}
-            COMMAND ${CMAKE_COMMAND} -E copy ${fullFileName}  ${dest}
-            MAIN_DEPENDENCY  ${fullFileName}
-            COMMENT "Updating ${file} into ${dest}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${fullFileName} ${dest}
+            DEPENDS ${fullFileName}
+            COMMENT "Copying ${file} to ${dest}"
         )
+        
+        # Make the copy target not show up in the solution by default
+        set_target_properties(copy_${file} PROPERTIES EXCLUDE_FROM_DEFAULT_BUILD TRUE)
     endforeach()
 endfunction()
 
@@ -157,20 +164,24 @@ endfunction()
 function(copyTargetCommand list dest returned_target_name)
     set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
+    set(dest_list "")
     foreach(fullFileName ${list})
         get_filename_component(file ${fullFileName} NAME)
         message("Generating custom command for ${fullFileName}")
-        add_custom_command(
-            OUTPUT   ${dest}/${file}
-            PRE_BUILD
+        
+        # Use custom target approach to avoid duplication conflicts
+        add_custom_target(copy_${file}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${dest}
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${fullFileName} ${dest}
-            MAIN_DEPENDENCY  ${fullFileName}
-            COMMENT "Updating ${file} into ${dest}"
+            DEPENDS ${fullFileName}
+            COMMENT "Copying ${file} to ${dest}"
         )
-        list(APPEND dest_list ${dest}/${file})
+        
+        # Make the copy target not show up in the solution by default
+        set_target_properties(copy_${file} PROPERTIES EXCLUDE_FROM_DEFAULT_BUILD TRUE)
+        list(APPEND dest_list copy_${file})
     endforeach()
 
-    add_custom_target(${returned_target_name} DEPENDS "${dest_list}")
+    add_custom_target(${returned_target_name} DEPENDS ${dest_list})
     set_target_properties(${returned_target_name} PROPERTIES FOLDER CopyTargets)
 endfunction()
