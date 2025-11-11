@@ -178,3 +178,24 @@ function(copyTargetCommand list dest returned_target_name)
     add_custom_target(${returned_target_name} DEPENDS "${dest_list}")
     set_target_properties(${returned_target_name} PROPERTIES FOLDER CopyTargets)
 endfunction()
+
+function(copyShaderCommand list dest returned_target_name)
+    set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+    foreach(fullFileName ${list})
+        get_filename_component(file ${fullFileName} NAME)
+        message("Generating custom command for ${fullFileName}")
+        add_custom_command(
+            OUTPUT   ${dest}/${file}
+            PRE_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${dest}
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${fullFileName} ${dest}
+            MAIN_DEPENDENCY  ${fullFileName}
+            COMMENT "Updating shader ${file} into ${dest}"
+        )
+        list(APPEND dest_list ${dest}/${file})
+    endforeach()
+
+    add_custom_target(${returned_target_name} DEPENDS "${dest_list}")
+    set_target_properties(${returned_target_name} PROPERTIES FOLDER CopyShaders)
+endfunction()

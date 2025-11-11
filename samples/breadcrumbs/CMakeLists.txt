@@ -46,8 +46,8 @@ file(GLOB breadcrumbs_src
 file(GLOB breadcrumbs_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.hlsl)
-set_source_files_properties(${breadcrumbs_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
-copyCommand("${breadcrumbs_shaders}" ${SHADER_OUTPUT})
+# set_source_files_properties(${breadcrumbs_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+copyShaderCommand("${breadcrumbs_shaders}" ${SHADER_OUTPUT} copied_breadcrumbs_shaders)
 
 # Add config file
 set(config_file ${CMAKE_CURRENT_SOURCE_DIR}/config/breadcrumbsconfig.json)

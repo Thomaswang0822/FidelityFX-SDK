@@ -45,8 +45,8 @@ file(GLOB cas_src
 file(GLOB cas_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.hlsl)
-set_source_files_properties(${cas_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
-copyCommand("${cas_shaders}" ${SHADER_OUTPUT})
+# set_source_files_properties(${cas_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+copyShaderCommand("${cas_shaders}" ${SHADER_OUTPUT} copied_cas_shaders)
 
 # Add config file
 set(config_file ${CMAKE_CURRENT_SOURCE_DIR}/config/casconfig.json)

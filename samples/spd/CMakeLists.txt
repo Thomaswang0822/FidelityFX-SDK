@@ -45,8 +45,8 @@ file(GLOB spd_src
 file(GLOB spd_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.hlsl)
-set_source_files_properties(${spd_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
-copyCommand("${spd_shaders}" ${SHADER_OUTPUT})
+# set_source_files_properties(${spd_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+copyShaderCommand("${spd_shaders}" ${SHADER_OUTPUT} copied_spd_shaders)
 
 # Add config file
 set(config_file ${CMAKE_CURRENT_SOURCE_DIR}/config/spdconfig.json)

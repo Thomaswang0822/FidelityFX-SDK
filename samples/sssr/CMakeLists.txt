@@ -55,8 +55,8 @@ file(GLOB sssr_src
 file(GLOB sssr_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.hlsl)
-set_source_files_properties(${sssr_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
-copyCommand("${sssr_shaders}" ${SHADER_OUTPUT})
+# set_source_files_properties(${sssr_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+copyShaderCommand("${sssr_shaders}" ${SHADER_OUTPUT} copied_sssr_shaders)
 
 # Add config file
 set(config_file ${CMAKE_CURRENT_SOURCE_DIR}/config/sssrconfig.json)

@@ -47,8 +47,8 @@ file(GLOB parallelsort_src
 file(GLOB parallelsort_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.hlsl
 	${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.h)
-set_source_files_properties(${parallelsort_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
-copyCommand("${parallelsort_shaders}" ${SHADER_OUTPUT})
+# set_source_files_properties(${parallelsort_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+copyShaderCommand("${parallelsort_shaders}" ${SHADER_OUTPUT} copied_parallelsort_shaders)
 
 # Parallel Sort config file
 set(config_file ${CMAKE_CURRENT_SOURCE_DIR}/config/parallelsortconfig.json)
