@@ -98,6 +98,41 @@ if (FFX_BRIXELIZER_GI OR FFX_ALL)
 	set(START_PROJECT FFX_BRIXELIZER_GI PARENT_SCOPE)
 endif()
 
+# Add explicit dependencies on the backend for all samples to ensure build order
+if(FFX_DEV_API)
+    if(CAULDRON_DX12)
+        set(BACKEND_TARGET ffx_backend_dx12_${CMAKE_GENERATOR_PLATFORM})
+    elseif(CAULDRON_VK)
+        set(BACKEND_TARGET ffx_backend_vk_${CMAKE_GENERATOR_PLATFORM})
+    endif()
+
+        if(TARGET ${BACKEND_TARGET})
+            # List of all sample targets
+            set(SAMPLE_TARGETS
+                FFX_BREADCRUMBS
+                FFX_API_FSR
+                FFX_SPD
+                FFX_CACAO
+                FFX_LPM
+                FFX_BLUR
+                FFX_PARALLEL_SORT
+                FFX_VRS
+                FFX_CAS
+                FFX_SSSR
+                FFX_DOF
+                FFX_LENS
+                FFX_HYBRIDSHADOWS
+                FFX_HYBRIDREFLECTIONS
+                FFX_BRIXELIZER_GI
+            )
+        foreach(sample_target ${SAMPLE_TARGETS})
+            if(TARGET ${sample_target})
+                add_dependencies(${sample_target} ${BACKEND_TARGET})
+            endif()
+        endforeach()
+    endif()
+endif()
+
 # If we are building everything, default FFX_API_FSR as the startup project
 if (FFX_ALL)
     set(START_PROJECT FFX_API_FSR PARENT_SCOPE)
