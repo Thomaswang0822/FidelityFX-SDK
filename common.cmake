@@ -137,17 +137,14 @@ function(copyCommand list dest)
     foreach(fullFileName ${list})
         get_filename_component(file ${fullFileName} NAME)
         message("Generating custom command for ${fullFileName}")
-        
-        # Use custom target approach to avoid duplication conflicts
-        add_custom_target(copy_${file} ALL
+        add_custom_command(
+            OUTPUT   ${dest}/${file}
+            PRE_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory ${dest}
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${fullFileName} ${dest}
-            DEPENDS ${fullFileName}
-            COMMENT "Copying ${file} to ${dest}"
+            COMMAND ${CMAKE_COMMAND} -E copy ${fullFileName}  ${dest}
+            MAIN_DEPENDENCY  ${fullFileName}
+            COMMENT "Updating ${file} into ${dest}"
         )
-        
-        # Make the copy target not show up in the solution by default
-        set_target_properties(copy_${file} PROPERTIES EXCLUDE_FROM_DEFAULT_BUILD TRUE)
     endforeach()
 endfunction()
 
@@ -164,24 +161,20 @@ endfunction()
 function(copyTargetCommand list dest returned_target_name)
     set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-    set(dest_list "")
     foreach(fullFileName ${list})
         get_filename_component(file ${fullFileName} NAME)
         message("Generating custom command for ${fullFileName}")
-        
-        # Use custom target approach to avoid duplication conflicts
-        add_custom_target(copy_${file}
+        add_custom_command(
+            OUTPUT   ${dest}/${file}
+            PRE_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory ${dest}
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${fullFileName} ${dest}
-            DEPENDS ${fullFileName}
-            COMMENT "Copying ${file} to ${dest}"
+            MAIN_DEPENDENCY  ${fullFileName}
+            COMMENT "Updating ${file} into ${dest}"
         )
-        
-        # Make the copy target not show up in the solution by default
-        set_target_properties(copy_${file} PROPERTIES EXCLUDE_FROM_DEFAULT_BUILD TRUE)
-        list(APPEND dest_list copy_${file})
+        list(APPEND dest_list ${dest}/${file})
     endforeach()
 
-    add_custom_target(${returned_target_name} DEPENDS ${dest_list})
+    add_custom_target(${returned_target_name} DEPENDS "${dest_list}")
     set_target_properties(${returned_target_name} PROPERTIES FOLDER CopyTargets)
 endfunction()
