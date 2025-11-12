@@ -1094,6 +1094,125 @@ namespace cauldron
         m_Config.Validate();
     }
 
+    void Framework::ParseHackOptions(const json& jsonConfigData)
+    {
+        // Get the global switch
+        json configData = jsonConfigData;
+        if (configData.find("HackOptions") == configData.end()) 
+            return;
+        
+        json hackOptions = configData["HackOptions"];
+        CauldronAssert(ASSERT_ERROR, hackOptions.find("EnableHack") != hackOptions.end(), L"HackOptions must have EnableHack field");
+        bool enableHack                 = hackOptions.value<bool>("EnableHack", false);
+        m_Config.HackOptions.enableHack = enableHack;
+        if (!enableHack)
+            return;
+
+        // Identifier (scene name)
+        if (hackOptions.find("Identifier") != hackOptions.end())
+        {
+            m_Config.HackOptions.identifier = hackOptions.value<std::string>("Identifier", "UNDEFINED");
+        }
+        
+        // Render Resolution
+        if (hackOptions.find("DisplayResolution") != hackOptions.end())
+        {
+            uint32_t resOption = hackOptions.value<uint32_t>("DisplayResolution", 1);
+            CauldronAssert(ASSERT_ERROR, resOption == 1 || resOption == 2 || resOption == 4, L"Render Resolution option must be <1 or 2 or 4>, got %d", resOption);
+            m_Config.HackOptions.displayResolution = static_cast<CauldronConfig::HackOptionDef::HackDisplayResolution>(resOption);
+        
+            if (resOption == 1) {
+                m_Config.Width = 1920;
+                m_Config.Height = 1080;
+            }
+            else if (resOption == 2)
+            {
+                m_Config.Width  = 2560;
+                m_Config.Height = 1440;
+            }
+            else if (resOption == 4) {
+                m_Config.Width = 3840;
+                m_Config.Height = 2160;
+            }
+        }
+
+        // Parse jitter or not
+        if (hackOptions.find("ParseJitter") != hackOptions.end())
+        {
+            m_Config.HackOptions.parseJitter = hackOptions.value("ParseJitter", false);
+        }
+
+        // Paths the input should be folder path to frame capture, like NPP_JI
+        filesystem::path parentPath;
+        if (hackOptions.find("HackPaths") != hackOptions.end())
+        {
+            m_Config.HackOptions.hackPaths.push_back(StringToWString(hackOptions.value<std::string>(
+                "HackPaths", "../media/TEST_SCENE/NPP_JI")
+            ));
+
+            /// we need 3 entries of 2 subfolders:
+            parentPath = filesystem::path(m_Config.HackOptions.hackPaths.front()).parent_path();
+            auto jitterPath = parentPath / "MVD_JI";
+            m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
+            m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
+        }
+
+        m_Config.HackOptions.storeOutput = hackOptions.value("StoreOutput", false);
+
+        if (hackOptions.find("OutputPath") != hackOptions.end())
+        {
+            m_Config.HackOptions.outPath = StringToWString(hackOptions.value<std::string>(
+                "OutputPath", "../media/TEST_SCENE/outputs"));
+        }
+        else
+        {
+            // default outPath to <parentPath>/outputs
+            m_Config.HackOptions.outPath = parentPath.append("outputs").wstring();
+        }
+
+        // First, we make do a sanity check: exr file numbers should match 
+        auto count_exr_files = [](const filesystem::path& folderPath) {
+            return std::count_if(filesystem::directory_iterator(folderPath), filesystem::directory_iterator{}, [](const auto& entry) {
+                return entry.path().extension() == ".exr";
+            });
+        };
+        const auto nTargets    = count_exr_files(filesystem::path(m_Config.HackOptions.hackPaths.front()));
+        const auto jitterCount = count_exr_files(filesystem::path(m_Config.HackOptions.hackPaths.back()));
+        CauldronAssert(
+            ASSERT_ERROR, nTargets == jitterCount, 
+            L"frame capture count and jitter count should match, but got %d and %d", nTargets, jitterCount);
+        
+        // then set 2 counters:
+        // outputMaxCount = frameCount (capture all output) if it's not set OR it's larger than frameCount
+        m_Config.HackOptions.frameCount = static_cast<size_t>(nTargets);
+        m_Config.HackOptions.outputMaxCount = std::min(
+            hackOptions.value<size_t>("OutputMaxCount", m_Config.HackOptions.frameCount), 
+            m_Config.HackOptions.frameCount);
+
+        // Finally we create nTargets of each type of Render targets.
+        const std::vector<std::wstring>   renderTargetNames = {L"CurrFrameHack", L"MvHack", L"DepthHack"};
+        const std::vector<ResourceFormat> formats           = {ResourceFormat::RGBA8_UNORM, ResourceFormat::RG16_FLOAT, ResourceFormat::R32_FLOAT};
+        for (size_t type = 0; type < renderTargetNames.size(); type++)
+        {
+            for (size_t i = 0; i < nTargets; ++i)
+            {
+                std::wstring              fullname = renderTargetNames[type] + L"_" + std::to_wstring(i);
+                RenderResourceInformation info;
+                auto                      check = m_Config.CurrentDisplayMode;
+                info.Format                     = formats[type];
+                info.AllowUAV                   = false;
+                info.RenderResolution           = false;
+                auto emplaceResults             = m_Config.RenderResources.emplace(std::make_pair(fullname, info));
+                if (!emplaceResults.second)
+                {
+                    CauldronWarning(L"Hacking render target %s has been defined in cauldronconfig.json RenderResources.", fullname);
+                    emplaceResults.first->second = info;
+                }
+            }
+        }  // end of hacking render targets creation
+
+    }
+
     void Framework::InitConfig()
     {
         // Parse config file
@@ -1230,6 +1349,9 @@ namespace cauldron
         // Parse the data for cauldron
         ParseConfigData(cauldronConfig);
 
+        // Parse Hack options
+        ParseHackOptions(cauldronConfig);
+
         // Do sample-side configuration loading
         ParseSampleConfig();
 
@@ -1261,6 +1383,9 @@ namespace cauldron
         LPWSTR* pArgList;
         int argCount;
         pArgList = CommandLineToArgvW(cmdLine, &argCount);
+
+        // Step into hack option mode in case any hack option conincide with existing names
+        bool         hackMode = false;
 
         std::wstring command;
         for (int currentArg = 0; currentArg < argCount; ++currentArg)
@@ -1569,6 +1694,100 @@ namespace cauldron
                 currentArg += 1;
                 continue;
             }
+        
+            if (command == L"-EnableHack")
+            {
+                // we reset HackOptions otherwise bool fields can't be overwritten to false
+                m_Config.HackOptions            = CauldronConfig::HackOptionDef{};
+                hackMode = true;
+                m_Config.HackOptions.enableHack = true;
+                continue;
+            }
+
+            if (hackMode && command == L"-Identifier")
+            {
+                // We require at least 1 argument
+                CauldronAssert(ASSERT_CRITICAL,
+                               argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-',
+                               L"-Identifier requires a input to be provided (usage: -Identifier <input>");
+                m_Config.HackOptions.identifier = WStringToString(pArgList[currentArg + 1]);
+                currentArg += 1;
+                continue;
+            }
+
+            if (hackMode && command == L"-DisplayResolution")
+            {
+                // We require at least 1 argument
+                CauldronAssert(ASSERT_CRITICAL,
+                               argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-',
+                               L"-DisplayResolution requires a input to be provided (usage: -DisplayResolution <1 or 2 or 4>");
+                int resOption = std::stoi(pArgList[currentArg + 1]);
+                CauldronAssert(ASSERT_ERROR, resOption == 1 || resOption == 2 || resOption == 4, 
+                               L"usage: -DisplayResolution <1 or 2 or 4>, got %d", resOption);
+                m_Config.HackOptions.displayResolution = static_cast<CauldronConfig::HackOptionDef::HackDisplayResolution>(resOption);
+
+                currentArg += 1;
+                continue;
+            }
+
+            if (hackMode && command == L"-ParseJitter")
+            {
+                m_Config.HackOptions.parseJitter = true;
+                continue;
+            }
+
+            if (hackMode && command == L"-HackPaths")
+            {
+                // We require at least 1 argument
+                CauldronAssert(ASSERT_CRITICAL,
+                               argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-',
+                               L"-HackPaths requires a input to be provided (usage: -HackPaths <input>");
+
+                m_Config.HackOptions.hackPaths.push_back(pArgList[currentArg + 1]);
+                /// we need 3 entries of 2 subfolders:
+                auto parentPath = filesystem::path(m_Config.HackOptions.hackPaths.front()).parent_path();
+                auto jitterPath = parentPath / "MVD_JI";
+                CauldronAssert(ASSERT_ERROR, filesystem::exists(jitterPath), L"Encoded MVs and Depths exr files must be stored in %s", jitterPath.c_str());
+                m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
+                m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
+
+                currentArg += 1;
+                continue;
+            }
+
+            if (hackMode && command == L"-StoreOutput")
+            {
+                m_Config.HackOptions.storeOutput = true;
+                continue;
+            }
+
+
+            if (hackMode && command == L"-OutputMaxCount")
+            {
+                // We require at least 1 argument
+                CauldronAssert(ASSERT_CRITICAL,
+                               argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-',
+                               L"-OutputMaxCount requires a input to be provided (usage: -OutputMaxCount <input>");
+
+                // cap outputMaxCount to frameCount (capture all output)
+                m_Config.HackOptions.outputMaxCount = std::min(
+                    std::stoull(pArgList[currentArg + 1]),  // size_t is u long long
+                    m_Config.HackOptions.frameCount);
+
+                currentArg += 1;
+                continue;
+            }
+
+            if (hackMode && command == L"-OutputPath")
+            {
+                // We require at least 1 argument
+                CauldronAssert(ASSERT_CRITICAL,
+                               argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-',
+                               L"-OutputPath requires a input to be provided (usage: -OutputPath <input>");
+                m_Config.HackOptions.outPath = pArgList[currentArg + 1];
+                currentArg += 1;
+                continue;
+            }
         }
 
         // Pass on the command line string to the sample in the event they are overriding our parsing
@@ -1680,7 +1899,7 @@ namespace cauldron
             {
                 CPUScopedProfileCapture marker(L"RM Executes");
                 for (auto& callback : m_ExecutionCallbacks)
-                {
+                {     
                     if (callback.second.first->ModuleEnabled() && callback.second.first->ModuleReady())
                     {
                         m_pCmdListForFrame = m_pDevice->CreateCommandList(L"RenderModuleGraphicsCmdList", CommandQueue::Graphics);
@@ -1936,6 +2155,7 @@ namespace cauldron
             // imitate user closing the window for graceful shutdown
             PostQuitMessage(0);
         }
+
     }
 
     const Texture* Framework::GetColorTargetForCallback(const wchar_t* callbackOrModuleName)
@@ -2277,6 +2497,7 @@ namespace cauldron
         // i.e. things we don't want to do before DoSampleInit because it might take long to happen
         pFramework->PreRun();
 
+        auto resInfo = pFramework->GetResolutionInfo();
         // Run the framework (won't return until we are done
         int32_t result = pFramework->Run();
 

@@ -221,7 +221,7 @@ if(CAULDRON_VK)
 	add_dependencies(Framework memoryallocator_vk)
 endif()
 
-target_link_libraries (Framework stb imgui amd_acs dxc Xinput Shcore)
+target_link_libraries (Framework stb tinyexr imgui amd_acs dxc Xinput Shcore)
 
 if(CAULDRON_DX12)
 	target_link_libraries (Framework DXGI amd_ags memoryallocator_dx12 D3D12 pixlib agilitysdk dxheaders)

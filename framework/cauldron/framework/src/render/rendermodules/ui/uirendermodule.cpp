@@ -319,9 +319,9 @@ namespace cauldron
         GPUScopedProfileCapture UIMarker(pCmdList, L"UI");
 
         // If upscaler is enabled, we NEED to have hit the upscaler by now!
-        CauldronAssert(ASSERT_WARNING,
-                       GetFramework()->GetUpscalingState() != UpscalerState::PreUpscale,
-                       L"Upscale state is still PreUpscale when reaching UIRendermodule. This should not be the case.");
+        //CauldronAssert(ASSERT_WARNING,
+        //               GetFramework()->GetUpscalingState() != UpscalerState::PreUpscale,
+        //               L"Upscale state is still PreUpscale when reaching UIRendermodule. This should not be the case.");
 
         // And fetch all the data ImGUI pushed this frame for UI rendering
         ImDrawData* pUIDrawData = ImGui::GetDrawData();
@@ -412,6 +412,9 @@ namespace cauldron
                 pIdx += pIMCmdList->IdxBuffer.Size;
             }
 
+            // Make clear distinction when display res (e.g. 4k) differs from hardware res (e.g. 2k)
+            const ResolutionInfo& resInfo = GetFramework()->GetResolutionInfo();
+            const ImVec2 monitorRes = ImGui::GetIO().DisplaySize;
             // Setup constant buffer data
             float left   = 0.0f;
             float right  = ImGui::GetIO().DisplaySize.x;
@@ -454,8 +457,15 @@ namespace cauldron
                     ImVec2 clipMax(pDrawCmd->ClipRect.z - clipOffset.x, pDrawCmd->ClipRect.w - clipOffset.y);
                     if (clipMax.x <= clipMin.x || clipMax.y <= clipMin.y)
                         continue;
-                    Rect scissorRect = {
-                        static_cast<uint32_t>(clipMin.x), static_cast<uint32_t>(clipMin.y), static_cast<uint32_t>(clipMax.x), static_cast<uint32_t>(clipMax.y)};
+
+                    // Scale scissor rects to render resolution;
+                    // right and bottom are monitor width and height from ImGui::GetIO().DisplaySize
+                    float                 scaleX  = resInfo.fDisplayWidth() / monitorRes.x;
+                    float                 scaleY  = resInfo.fDisplayHeight() / monitorRes.y;
+                    Rect scissorRect = {static_cast<uint32_t>(clipMin.x * scaleX),
+                                        static_cast<uint32_t>(clipMin.y * scaleY),
+                                        static_cast<uint32_t>(clipMax.x * scaleX),
+                                        static_cast<uint32_t>(clipMax.y * scaleY)};
 
                     RenderCommand cmd{};
                     cmd.scissor    = scissorRect;

@@ -43,6 +43,13 @@ namespace cauldron
         uint32_t            MipLevels        = 0;                               ///< The texture's mip map count.
         std::wstring        Name             = L"";                             ///< The tesxture's name.
 
+        /// A utility function to get the 2d size of the texture.
+        ///
+        std::pair<uint32_t, uint32_t> getDim() const
+        {
+            return std::make_pair(Width, Height);
+        }
+
         /// A convenience function to create a texture description for 1D textures.
         ///
         static inline TextureDesc Tex1D(const wchar_t* name, ResourceFormat format, uint32_t width, uint32_t arraySize = 1, uint32_t mipLevels = 0, ResourceFlags flags = ResourceFlags::None)

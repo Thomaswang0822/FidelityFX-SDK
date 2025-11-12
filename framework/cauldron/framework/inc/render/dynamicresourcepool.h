@@ -99,7 +99,7 @@ namespace cauldron
          */
         const Buffer* CreateBuffer(const BufferDesc* pDesc, ResourceState initialState, BufferResizeFunction fn = nullptr);
 
-    private:
+    public:
         std::vector<std::pair<std::wstring, Texture*>>  m_Textures;
         std::vector<std::pair<std::wstring, Buffer*>>   m_Buffers;
         std::vector<Texture*>                           m_ResizableTextures; 

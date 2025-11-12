@@ -340,6 +340,11 @@ namespace cauldron
                     z -= inputState.GetGamePadAxisState(Pad_LeftThumbY) * displacementIncr;
                     y -= inputState.GetGamePadAxisState(Pad_LTrigger) * displacementIncr;
                     y += inputState.GetGamePadAxisState(Pad_RTrigger) * displacementIncr;
+
+                    //// move camera top-left such that objects moves down-right
+                    //x += -displacementIncr;
+                    //y += displacementIncr;
+
                     Vec4 movement = Vec4(x, y, z, 0.f);
 
                     Mat4& transform = m_pOwner->GetTransform();

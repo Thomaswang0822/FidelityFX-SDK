@@ -218,6 +218,26 @@ namespace cauldron
 
         } StartupContent;
 
+        struct HackOptionDef
+        {
+            bool                      enableHack        = false;
+            std::string               identifier        = "";
+            enum class HackDisplayResolution
+            {
+                DR_1K = 1,
+                DR_2K = 2,
+                DR_4K = 4
+            } displayResolution                        = HackDisplayResolution::DR_1K;
+            bool                      parseJitter      = false;
+            std::vector<std::wstring> hackPaths        = {};
+            bool                      storeOutput      = false;
+            size_t                    outputMaxCount   = 0;
+            std::wstring              outPath          = L"";
+
+            // internal, should not be set directly. Set by counting exr files in hackPaths
+            size_t frameCount = 0;
+        } HackOptions;
+
         // Perf Output
         uint32_t                      BenchmarkFrameDuration = -1;
         std::wstring                  BenchmarkPath = L"";
@@ -413,6 +433,11 @@ namespace cauldron
          * @brief   Utility function to parse all known options from config data.
          */
         void ParseConfigData(const json& jsonConfigData);
+
+        /**
+         * @brief   Utility function to parse all hack options from config data.
+         */
+        void ParseHackOptions(const json& jsonConfigData);
 
         /**
          * @brief   Retrieves the <c><i>TaskManager</i></c> instance.
@@ -719,6 +744,7 @@ namespace cauldron
 
         void ParseConfigFile(const wchar_t* configFileName);
         void ParseCmdLine(const wchar_t* cmdLine);
+        //void ParseHackOptions();
 
         void BeginFrame();
         void EndFrame();
@@ -729,8 +755,12 @@ namespace cauldron
         std::wstring            m_ConfigFileName;
         std::wstring            m_CmdLine;
         std::wstring            m_CPUName = L"Not Set";
+        /*
         ResolutionInfo          m_ResolutionInfo            = {1920, 1080, 1920, 1080, 1920, 1080};
         ResolutionInfo          m_BenchmarkResolutionInfo   = {1920, 1080, 1920, 1080, 1920, 1080};
+        */
+        ResolutionInfo          m_ResolutionInfo            = {3840, 2160, 3840, 2160, 3840, 2160};
+        ResolutionInfo          m_BenchmarkResolutionInfo   = {3840, 2160, 3840, 2160, 3840, 2160};
         UpscalerState           m_UpscalingState = UpscalerState::None;
         ResolutionUpdateFunc    m_ResolutionUpdaterFn = nullptr;
         bool                    m_UpscalerEnabled = false;

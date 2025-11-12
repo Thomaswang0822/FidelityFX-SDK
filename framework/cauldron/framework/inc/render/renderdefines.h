@@ -296,6 +296,24 @@ namespace cauldron
         BC7_SRGB,           ///< BC7 compressed (SRGB) type.
     };
 
+    // Format string for logging
+    inline const wchar_t* GetResourceFormatString(ResourceFormat format)
+    {
+        switch (format)
+        {
+        case ResourceFormat::RGBA8_UNORM:
+            return L"RGBA8_UNORM";
+        case ResourceFormat::RGB10A2_UNORM:
+            return L"RGB10A2_UNORM";
+        case ResourceFormat::RGBA16_FLOAT:
+            return L"RGBA16_FLOAT";
+        case ResourceFormat::RGBA32_FLOAT:
+            return L"RGBA32_FLOAT";
+        default:
+            return L"UNKNOWN";
+        }
+    }
+
     /// An enumeration for resource states
     ///
     /// @ingroup CauldronRender

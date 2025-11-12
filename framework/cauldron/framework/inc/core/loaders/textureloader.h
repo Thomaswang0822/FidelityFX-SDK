@@ -30,6 +30,7 @@
 #include <experimental/filesystem>
 
 #include <functional>
+#include <shaders/shadercommon.h>
 
 namespace cauldron
 {
@@ -136,6 +137,92 @@ namespace cauldron
 
         float m_AlphaTestCoverage = 1.f;
         float m_AlphaThreshold = 1.f;
+    };
+
+    /**
+     * @class EXRTextureDataBlock
+     *
+     * Data block loader for OpenEXR image loads.
+     * Handles HDR textures with float16/float32 channels.
+     *
+     * @ingroup CauldronLoaders
+     */
+    class EXRTextureDataBlock : public TextureDataBlock
+    {
+    public:
+        enum class SpecialChannelType : int
+        {
+            ColorRGB = 0,       // format handled by SetResourceFormat()
+            MotionVectors = 1,  // RG16_FLOAT format
+            Depth = 2           // R32_FLOAT format
+        };
+
+
+        EXRTextureDataBlock(float scaleFactor = 1.0f)
+            : TextureDataBlock()
+            , m_UpscaleRatio(scaleFactor)
+        {}
+        virtual ~EXRTextureDataBlock();
+
+        virtual bool LoadTextureData(std::experimental::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
+
+        virtual void CopyTextureData(void* pDest, uint32_t stride, uint32_t widthStride, uint32_t height, uint32_t sliceOffset) override;
+
+        /**
+         * @brief   Loads motion vectors or depth from a FIXED 1k jitter EXR file (RG=motion vectors, B=depth)
+         * 
+         * @param textureFile    Path to the EXR file
+         * @param alphaThreshold Unused parameter (retained for signature compatibility)
+         * @param texDesc        Output texture description
+         * @param channelType    Specifies whether to load motion vectors or depth
+         * 
+         * @return               If loading succeeded
+         */
+        bool LoadJitterData1K(std::experimental::filesystem::path& textureFile, 
+                              float alphaThreshold, 
+                              TextureDesc& texDesc,
+                              SpecialChannelType channelType);
+
+        /**
+         * @brief   Sets the resource format to that in the swapchain.
+         * @param format Should be one of the following, already be set by SwapChain creation:
+         * RGBA8_UNORM, RGB10A2_UNORM, or RGBA16_FLOAT.
+         * 
+         */
+        void SetResourceFormat(ResourceFormat format) { 
+            m_Format = format; 
+        }
+
+        /**
+         * @brief Creates a debug texture with four distinct regions for coordinate verification
+         * 
+         * @param texDesc Texture description to populate
+         */
+        bool CreateDebugCoordinateTexture(TextureDesc& texDesc);
+
+        /**
+         * @brief Given a folder path, find all exr file paths. Also, optionally store jitter xy float2 from filenames.
+         * 
+         * @param outPaths Ref to a vector to save the paths.
+         * @param extractJitter Whether to extract jitter xy from filenames. Now we only have them in 1k inputs
+         * @param jitterXY If extractJitter, store data here.
+         */
+        static size_t TraverseFolder(std::wstring                                      folderPath,
+                                     std::vector<std::experimental::filesystem::path>& outPaths,
+                                     bool                                              extractJitter,
+                                     std::vector<std::pair<float, float>>&             jitterXY);
+
+
+    private:
+        std::wstring textureName   = L"uninitialized";
+        char*  m_pData    = nullptr;  // EXR uses float*, but it will cause error
+        int    m_Width    = 0;
+        int    m_Height   = 0;
+        int    m_Channels = 0;
+        // depending on display mode LDR or HDR, see setter
+        ResourceFormat m_Format = ResourceFormat::Unknown;
+        uint32_t       m_BytesPerPixel = 4;
+        float          m_UpscaleRatio  = 1.0f;
     };
 
     /**

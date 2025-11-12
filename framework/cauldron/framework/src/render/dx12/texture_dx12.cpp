@@ -122,6 +122,10 @@ namespace cauldron
             // Get the pointer for the entries in this slice (depth slice or array entr6y)
             UINT8* pPixels = pTransferInfo->DataPtr(a);
 
+            if (m_TextureDesc.Name == L"PrevFrameHack")
+            {
+                auto check = this;
+            }
             // Copy all the mip slices into the offsets specified by the footprint structure
             for (uint32_t mip = 0; mip < m_TextureDesc.MipLevels; ++mip)
             {

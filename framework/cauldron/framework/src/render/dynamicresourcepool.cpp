@@ -135,6 +135,7 @@ namespace cauldron
     {
         // Explicitly add depth or render target flag when creating render textures
         TextureDesc desc = *pDesc;
+        
         if (IsDepth(pDesc->Format))
             desc.Flags = static_cast<ResourceFlags>(desc.Flags | ResourceFlags::AllowDepthStencil);
         else

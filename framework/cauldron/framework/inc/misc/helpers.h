@@ -169,3 +169,15 @@ inline uint8_t CountBitsSet(uint32_t val) noexcept
 #endif
 }
 
+/// std::clamp, which is not available until C++17.
+template <class T>
+constexpr const T& std_clamp(const T& v, const T& lo, const T& hi)
+{
+    return (v < lo) ? lo : ((hi < v) ? hi : v);
+}
+
+//inline float ToneMap(float hdrValue, float exposure=1.f)
+//{
+//    // Simple Reinhard tone mapping
+//    return hdrValue / (1.0f + hdrValue * exposure);
+//}

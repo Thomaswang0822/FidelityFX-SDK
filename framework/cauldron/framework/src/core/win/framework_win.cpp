@@ -310,7 +310,8 @@ namespace cauldron
         // Store the new width/height (as both render and display resolution)
         // Pick the right method for doing the update
         if (m_pFramework->m_UpscalerEnabled && m_pFramework->m_ResolutionUpdaterFn)
-            m_pFramework->m_ResolutionInfo = m_pFramework->m_ResolutionUpdaterFn(width, height);
+            __noop;
+            //m_pFramework->m_ResolutionInfo = m_pFramework->m_ResolutionUpdaterFn(width, height);
         else
             m_pFramework->m_ResolutionInfo = {width, height, width, height, width, height};
 

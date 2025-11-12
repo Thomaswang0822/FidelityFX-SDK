@@ -18,16 +18,16 @@
 
         "Presentation": {
             "BackBufferCount": 3,
-            "Vsync": true,
+            "Vsync": false,
             "Fullscreen": false,
-            "Width": 2560,
-            "Height": 1440,
+            "Width": 3840,
+            "Height": 2160,
             "Mode": "DISPLAYMODE_LDR"
         },
 
         "RenderResources": {
             "HDR11Color": {
-                "Format": "RG11B10_FLOAT",
+                "Format": "RGBA8_UNORM",
                 "AllowUAV": true
             },
             "DepthTarget": {
@@ -53,6 +53,7 @@
                 "AllowUAV": true,
                 "RenderResolution": false
             }
+
         },
 
         "FontSize": 13,
@@ -89,6 +90,17 @@
 
         "Content": {
             "SceneExposure": 1.0
-        }
+        },
+
+      "HackOptions": {
+        "EnableHack": true,
+        "Identifier": "NativeAA_TEST",
+        "DisplayResolution": 4,
+        "ParseJitter": true,
+        "HackPaths": "../media/TEST_SCENE/NPP_JI",
+        "StoreOutput": true,
+        "OutputMaxCount": 10,
+        "OutputPath": "../media/TEST_SCENE/outputs_TEST"
+      }
     }
 }

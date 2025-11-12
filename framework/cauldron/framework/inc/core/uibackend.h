@@ -114,12 +114,12 @@ namespace cauldron
 
         std::atomic_bool    m_BackendReady = false;
 
-        bool    m_ShowTabbedDialog = true;
-        bool    m_ShowPerfDialog = true;
+        bool    m_ShowTabbedDialog = false;
+        bool    m_ShowPerfDialog = false;
 
         // Show the output window by default in Debug
 #if _DEBUG
-        bool    m_ShowOutputDialog = true;
+        bool    m_ShowOutputDialog = false;
 #else
         bool    m_ShowOutputDialog = false;
 #endif // _DEBUG

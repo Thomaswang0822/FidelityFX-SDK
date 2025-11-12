@@ -42,7 +42,7 @@ typedef struct AutoExposureSpdConstants
 struct TonemapperCBData
 {
     mutable float       Exposure = 1.0f;
-    mutable uint32_t    ToneMapper = 0;
+    mutable uint32_t    ToneMapper = 5;
     float               DisplayMaxLuminance;
     DisplayMode         MonitorDisplayMode;
 
