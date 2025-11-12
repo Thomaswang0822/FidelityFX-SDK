@@ -36,7 +36,7 @@ set(gbuffer_config ${CMAKE_CURRENT_SOURCE_DIR}/gbuffer/config/gbufferrendermodul
 file(GLOB gbuffer_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/gbuffer/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/gbuffer/shaders/*.hlsl)
-set_source_files_properties(${gbuffer_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${gbuffer_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
 copyCommand("${gbuffer_shaders}" ${SHADER_OUTPUT})
 
 # Animated textures
@@ -46,7 +46,7 @@ file(GLOB animatedtextures_src
 file(GLOB animatedtextures_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/animatedtextures/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/animatedtextures/shaders/*.hlsl)
-set_source_files_properties(${animatedtextures_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${animatedtextures_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
 copyCommand("${animatedtextures_shaders}" ${SHADER_OUTPUT})
 
 
@@ -58,7 +58,7 @@ set(translucency_config ${CMAKE_CURRENT_SOURCE_DIR}/translucency/config/transluc
 file(GLOB translucency_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/translucency/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/translucency/shaders/*.hlsl)
-set_source_files_properties(${translucency_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${translucency_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
 copyCommand("${translucency_shaders}" ${SHADER_OUTPUT})
 
 # Lighting
@@ -68,7 +68,7 @@ file(GLOB lighting_src
 file(GLOB lighting_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/lighting/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/lighting/shaders/*.hlsl)
-set_source_files_properties(${lighting_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${lighting_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
 copyCommand("${lighting_shaders}" ${SHADER_OUTPUT})
 
 # RasterShadow
@@ -79,7 +79,7 @@ set(raster_shadow_config ${CMAKE_CURRENT_SOURCE_DIR}/rastershadow/config/rasters
 file(GLOB raster_shadow_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/rastershadow/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/rastershadow/shaders/*.hlsl)
-set_source_files_properties(${raster_shadow_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${raster_shadow_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
 copyCommand("${raster_shadow_shaders}" ${SHADER_OUTPUT})
 
 # Skydome
@@ -90,7 +90,7 @@ set(skydome_config ${CMAKE_CURRENT_SOURCE_DIR}/skydome/config/skydomerendermodul
 file(GLOB skydome_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/skydome/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/skydome/shaders/*.hlsl)
-set_source_files_properties(${skydome_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${skydome_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
 copyCommand("${skydome_shaders}" ${SHADER_OUTPUT})
 
 # TAA
@@ -101,7 +101,7 @@ set(taa_config ${CMAKE_CURRENT_SOURCE_DIR}/taa/config/taarendermodule.json)
 file(GLOB taa_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/taa/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/taa/shaders/*.hlsl)
-set_source_files_properties(${taa_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${taa_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
 copyCommand("${taa_shaders}" ${SHADER_OUTPUT})
 
 # GPU particles
@@ -111,7 +111,7 @@ file(GLOB gpuparticle_src
 file(GLOB gpuparticle_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/gpuparticle/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/gpuparticle/shaders/*.hlsl)
-set_source_files_properties(${gpuparticle_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${gpuparticle_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
 copyCommand("${gpuparticle_shaders}" ${SHADER_OUTPUT})
 
 # Copy config files to output directory

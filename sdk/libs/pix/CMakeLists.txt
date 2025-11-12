@@ -20,15 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-add_library(pixlib SHARED IMPORTED GLOBAL)
-set_property(TARGET pixlib PROPERTY IMPORTED_IMPLIB ${CMAKE_CURRENT_SOURCE_DIR}/bin/${CMAKE_GENERATOR_PLATFORM}/WinPixEventRuntime.lib)
-
-set(winpixevent_binary
-    ${CMAKE_CURRENT_SOURCE_DIR}/bin/${CMAKE_GENERATOR_PLATFORM}/WinPixEventRuntime.dll)
-
-set(winpixgpucapturer_binary
-    ${CMAKE_CURRENT_SOURCE_DIR}/bin/WinPixGpuCapturer.dll)
-
 # Copies a set of files to a directory (only if they already don't exist or are different)
 #
 # Usage example:
@@ -45,7 +36,6 @@ function(copyTargetCommand list dest returned_target_name)
         message("Generating custom command for ${fullFileName}")
         add_custom_command(
             OUTPUT   ${dest}/${file}
-            PRE_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory ${dest}
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${fullFileName} ${dest}
             MAIN_DEPENDENCY  ${fullFileName}
@@ -58,6 +48,19 @@ function(copyTargetCommand list dest returned_target_name)
     set_target_properties(${returned_target_name} PROPERTIES FOLDER CopyTargets)
 endfunction()
 
-copyTargetCommand("${winpixevent_binary}" ${FFX_BIN_PATH} copied_winpixevent_bin)
+if(NOT FFX_DEV_API)
+    add_library(pixlib SHARED IMPORTED GLOBAL)
+    set_property(TARGET pixlib PROPERTY IMPORTED_IMPLIB ${CMAKE_CURRENT_SOURCE_DIR}/bin/${CMAKE_GENERATOR_PLATFORM}/WinPixEventRuntime.lib)
 
-add_dependencies(pixlib copied_winpixevent_bin)
+    set(winpixevent_binary
+        ${CMAKE_CURRENT_SOURCE_DIR}/bin/${CMAKE_GENERATOR_PLATFORM}/WinPixEventRuntime.dll)
+
+    set(winpixgpucapturer_binary
+        ${CMAKE_CURRENT_SOURCE_DIR}/bin/WinPixGpuCapturer.dll)
+
+    copyTargetCommand("${winpixevent_binary}" ${FFX_BIN_PATH} copied_winpixevent_bin)
+
+    add_dependencies(pixlib copied_winpixevent_bin)
+else()
+    message(STATUS "Skipping SDK PIX library in development mode (using framework's version)")
+endif()

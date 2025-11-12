@@ -9,22 +9,22 @@ project(FFX_HYBRIDSHADOWS)
 add_library(ffx_classifier_native STATIC IMPORTED)
 set_target_properties(ffx_classifier_native PROPERTIES
 					  IMPORTED_CONFIGURATIONS "DebugDX12;DebugVK;RelWithDebInfoDX12;RelWithDebInfoVK;ReleaseDX12;ReleaseVK"
-					  IMPORTED_LOCATION_DEBUGDX12 "${SDK_ROOT}/bin/ffx_sdk/ffx_classifier_${CMAKE_GENERATOR_PLATFORM}d.lib"
-					  IMPORTED_LOCATION_DEBUGVK "${SDK_ROOT}/bin/ffx_sdk/ffx_classifier_${CMAKE_GENERATOR_PLATFORM}d.lib"
-					  IMPORTED_LOCATION_RELEASEDX12 "${SDK_ROOT}/bin/ffx_sdk/ffx_classifier_${CMAKE_GENERATOR_PLATFORM}.lib"
-					  IMPORTED_LOCATION_RELEASEVK "${SDK_ROOT}/bin/ffx_sdk/ffx_classifier_${CMAKE_GENERATOR_PLATFORM}.lib"
-					  IMPORTED_LOCATION_RELWITHDEBINFODX12 "${SDK_ROOT}/bin/ffx_sdk/ffx_classifier_${CMAKE_GENERATOR_PLATFORM}drel.lib"
-					  IMPORTED_LOCATION_RELWITHDEBINFOVK "${SDK_ROOT}/bin/ffx_sdk/ffx_classifier_${CMAKE_GENERATOR_PLATFORM}drel.lib")
+					  IMPORTED_LOCATION_DEBUGDX12 "${FFX_SDK_LIB_PATH}/ffx_classifier_${CMAKE_GENERATOR_PLATFORM}d.lib"
+					  IMPORTED_LOCATION_DEBUGVK "${FFX_SDK_LIB_PATH}/ffx_classifier_${CMAKE_GENERATOR_PLATFORM}d.lib"
+					  IMPORTED_LOCATION_RELEASEDX12 "${FFX_SDK_LIB_PATH}/ffx_classifier_${CMAKE_GENERATOR_PLATFORM}.lib"
+					  IMPORTED_LOCATION_RELEASEVK "${FFX_SDK_LIB_PATH}/ffx_classifier_${CMAKE_GENERATOR_PLATFORM}.lib"
+					  IMPORTED_LOCATION_RELWITHDEBINFODX12 "${FFX_SDK_LIB_PATH}/ffx_classifier_${CMAKE_GENERATOR_PLATFORM}drel.lib"
+					  IMPORTED_LOCATION_RELWITHDEBINFOVK "${FFX_SDK_LIB_PATH}/ffx_classifier_${CMAKE_GENERATOR_PLATFORM}drel.lib")
 
 add_library(ffx_denoiser_native STATIC IMPORTED)
 set_target_properties(ffx_denoiser_native PROPERTIES
 					  IMPORTED_CONFIGURATIONS "DebugDX12;DebugVK;RelWithDebInfoDX12;RelWithDebInfoVK;ReleaseDX12;ReleaseVK"
-					  IMPORTED_LOCATION_DEBUGDX12 "${SDK_ROOT}/bin/ffx_sdk/ffx_denoiser_${CMAKE_GENERATOR_PLATFORM}d.lib"
-					  IMPORTED_LOCATION_DEBUGVK "${SDK_ROOT}/bin/ffx_sdk/ffx_denoiser_${CMAKE_GENERATOR_PLATFORM}d.lib"
-					  IMPORTED_LOCATION_RELEASEDX12 "${SDK_ROOT}/bin/ffx_sdk/ffx_denoiser_${CMAKE_GENERATOR_PLATFORM}.lib"
-					  IMPORTED_LOCATION_RELEASEVK "${SDK_ROOT}/bin/ffx_sdk/ffx_denoiser_${CMAKE_GENERATOR_PLATFORM}.lib"
-					  IMPORTED_LOCATION_RELWITHDEBINFODX12 "${SDK_ROOT}/bin/ffx_sdk/ffx_denoiser_${CMAKE_GENERATOR_PLATFORM}drel.lib"
-					  IMPORTED_LOCATION_RELWITHDEBINFOVK "${SDK_ROOT}/bin/ffx_sdk/ffx_denoiser_${CMAKE_GENERATOR_PLATFORM}drel.lib")
+					  IMPORTED_LOCATION_DEBUGDX12 "${FFX_SDK_LIB_PATH}/ffx_denoiser_${CMAKE_GENERATOR_PLATFORM}d.lib"
+					  IMPORTED_LOCATION_DEBUGVK "${FFX_SDK_LIB_PATH}/ffx_denoiser_${CMAKE_GENERATOR_PLATFORM}d.lib"
+					  IMPORTED_LOCATION_RELEASEDX12 "${FFX_SDK_LIB_PATH}/ffx_denoiser_${CMAKE_GENERATOR_PLATFORM}.lib"
+					  IMPORTED_LOCATION_RELEASEVK "${FFX_SDK_LIB_PATH}/ffx_denoiser_${CMAKE_GENERATOR_PLATFORM}.lib"
+					  IMPORTED_LOCATION_RELWITHDEBINFODX12 "${FFX_SDK_LIB_PATH}/ffx_denoiser_${CMAKE_GENERATOR_PLATFORM}drel.lib"
+					  IMPORTED_LOCATION_RELWITHDEBINFOVK "${FFX_SDK_LIB_PATH}/ffx_denoiser_${CMAKE_GENERATOR_PLATFORM}drel.lib")
 
 # Hybrid Shadows
 file(GLOB hybridshadows_src
@@ -33,7 +33,7 @@ file(GLOB hybridshadows_src
 file(GLOB hybridshadows_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.hlsl)
-set_source_files_properties(${hybridshadows_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${hybridshadows_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
 copyCommand("${hybridshadows_shaders}" ${SHADER_OUTPUT})
 
 # Add config file

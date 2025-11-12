@@ -46,7 +46,7 @@ endif()
 # Set configuration types based on what we are building for
 if (NOT FFX_CUSTOM_API)
 
-	# Are we buiding the GDK?
+	# Are we building the GDK?
 	if (FFX_API_BACKEND STREQUAL GDK_SCARLETT_X64 OR FFX_API_BACKEND STREQUAL GDK_XBOXONE_X64)
 		set(FFX_GDK ON)
 	endif()
@@ -113,39 +113,43 @@ elseif(CMAKE_GENERATOR STREQUAL "Visual Studio 17 2022")
 endif()
 
 # Set configuration types based on what we are building for
-if (NOT FFX_CUSTOM_API)
-
-	# Embed PDBs in the debug versions of the libs
-	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Z7 /Od")
-    
-	# Write debug, profile, and release versions of the static libs to the /bin folder as they are uniquely named	
-	set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG   ${CMAKE_HOME_DIRECTORY}/bin/ffx_sdk/)
-	set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_HOME_DIRECTORY}/bin/ffx_sdk/)
-	set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_HOME_DIRECTORY}/bin/ffx_sdk/)
-
-
-	if (FFX_BUILD_AS_DLL)
-		# Write both debug and release versions of the dlls to the /bin folder as they are uniquely named
-		set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG   ${CMAKE_HOME_DIRECTORY}/bin/ffx_sdk/)
-		set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_HOME_DIRECTORY}/bin/ffx_sdk/)
-		set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_HOME_DIRECTORY}/bin/ffx_sdk/)
-        set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS FFX_BUILD_AS_DLL)
-	endif()
+if(FFX_DEV_API)
+    if(FFX_API_BACKEND MATCHES "DX12")
+        # Write custom DX12 configurations
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUGDX12   ${BIN_OUTPUT}/ffx_sdk/)
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASEDX12 ${BIN_OUTPUT}/ffx_sdk/)
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFODX12 ${BIN_OUTPUT}/ffx_sdk/)
+        
+        if (FFX_BUILD_AS_DLL)
+            set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUGDX12   ${BIN_OUTPUT}/ffx_sdk/)
+            set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASEDX12 ${BIN_OUTPUT}/ffx_sdk/)
+            set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFODX12 ${BIN_OUTPUT}/ffx_sdk/)
+        endif()
+        
+    elseif(FFX_API_BACKEND MATCHES "VK")
+        # Write custom VK configurations
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUGVK   ${BIN_OUTPUT}/ffx_sdk/)
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASEVK ${BIN_OUTPUT}/ffx_sdk/)
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFOVK ${BIN_OUTPUT}/ffx_sdk/)
+        
+        if (FFX_BUILD_AS_DLL)
+            set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUGVK   ${BIN_OUTPUT}/ffx_sdk/)
+            set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASEVK ${BIN_OUTPUT}/ffx_sdk/)
+            set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFOVK ${BIN_OUTPUT}/ffx_sdk/)
+        endif()
+    endif()
 else()
-
-	# Ouput the static libs to the /bin folder as they are uniquely named
-	set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${BIN_OUTPUT}/ffx_sdk)
-	foreach( OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES} )
-		string( TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG )
-		set( CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${BIN_OUTPUT}/ffx_sdk/ )
-		if (FFX_BUILD_AS_DLL)
-			# Write both debug and release versions of the dlls to the /bin folder as they are uniquely named
-			set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG   ${CMAKE_HOME_DIRECTORY}/bin/ffx_sdk/)
-			set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_HOME_DIRECTORY}/bin/ffx_sdk/)
-			set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_HOME_DIRECTORY}/bin/ffx_sdk/)
-		endif()
-	endforeach( OUTPUTCONFIG CMAKE_CONFIGURATION_TYPES )
-
+    # Original behavior: standard configurations
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG   ${BIN_OUTPUT}/ffx_sdk/)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${BIN_OUTPUT}/ffx_sdk/)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO ${BIN_OUTPUT}/ffx_sdk/)
+    
+    if (FFX_BUILD_AS_DLL)
+        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG   ${BIN_OUTPUT}/ffx_sdk/)
+        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${BIN_OUTPUT}/ffx_sdk/)
+        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${BIN_OUTPUT}/ffx_sdk/)
+        set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS FFX_BUILD_AS_DLL)
+    endif()
 endif()
 
 if (FFX_FSR3)
@@ -158,7 +162,7 @@ if (FFX_SSSR)
 	option(FFX_DENOISER "Build FFX Denoiser API" ON)
 endif()
 
-# Add requred compile definitions
+# Add required compile definitions
 add_compile_definitions(_UNICODE)
 add_compile_definitions(UNICODE)
 add_compile_definitions(_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
@@ -229,6 +233,43 @@ elseif(FFX_API_BACKEND STREQUAL GDK_XBOXONE_X64)
 else()
 	# This is likely a custom include
 	project (FidelityFX-SDK)
+endif()
+
+# Include the common.cmake from root to use createConfig function
+# list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/..)
+# include(common)
+
+# Set configuration types: use custom ones for dev mode, else keep standard
+if(FFX_DEV_API)
+    message(STATUS "Setting SDK configurations to match root project")
+    
+    if(FFX_API_BACKEND MATCHES "DX12")
+        # Override the configuration types set in toolchain.cmake
+        set(CMAKE_CONFIGURATION_TYPES DebugDX12 ReleaseDX12 RelWithDebInfoDX12)
+        
+        # Use the createConfig function from root project
+        createConfig(DX12 DebugDX12 DEBUG)
+        createConfig(DX12 ReleaseDX12 RELEASE)
+        createConfig(DX12 RelWithDebInfoDX12 RELWITHDEBINFO)
+
+        # Set postfixes for custom configurations
+        set(CMAKE_DEBUGDX12_POSTFIX d)
+        set(CMAKE_RELWITHDEBINFODX12_POSTFIX drel)
+    elseif(FFX_API_BACKEND MATCHES "VK")
+        set(CMAKE_CONFIGURATION_TYPES DebugVK ReleaseVK RelWithDebInfoVK)
+        
+        createConfig(VK DebugVK DEBUG)
+        createConfig(VK ReleaseVK RELEASE)
+        createConfig(VK RelWithDebInfoVK RELWITHDEBINFO)
+
+        # Set postfixes for custom configurations
+        set(CMAKE_DEBUGVK_POSTFIX d)
+        set(CMAKE_RELWITHDEBINFOVK_POSTFIX drel)
+    endif()
+    
+    # Force the configuration types to be used
+    set(CMAKE_CONFIGURATION_TYPES "${CMAKE_CONFIGURATION_TYPES}" CACHE STRING "Configurations" FORCE)
+    message(STATUS "SDK configurations set to: ${CMAKE_CONFIGURATION_TYPES}")
 endif()
 
 # Components

@@ -65,14 +65,18 @@ set(FFX_SRC_BACKENDS_PATH ${SDK_ROOT}/src/backends)
 
 #Setup pathing to FFX_API objects
 if (FFX_DEV_API)
-	set(FFX_API_ROOTPATH ${API_ROOT}/bin)
-	set(FFX_API_PATHNAME_DX12D 		${FFX_API_ROOTPATH}/amd_fidelityfx_dx12d)
-	set(FFX_API_PATHNAME_DX12DREL 	${FFX_API_ROOTPATH}/amd_fidelityfx_dx12drel)
-	set(FFX_API_PATHNAME_DX12 		${FFX_API_ROOTPATH}/amd_fidelityfx_dx12)
-	set(FFX_API_PATHNAME_VKD 		${FFX_API_ROOTPATH}/amd_fidelityfx_vkd)
-	set(FFX_API_PATHNAME_VKDREL 	${FFX_API_ROOTPATH}/amd_fidelityfx_vkdrel)
-	set(FFX_API_PATHNAME_VK 		${FFX_API_ROOTPATH}/amd_fidelityfx_vk)
+    message(STATUS "FFX_DEV_API is ENABLED - Building with development API from ${API_ROOT}")
+	
+    # Development mode: use configuration-specific subdirectories in bin/ffx-api
+    set(FFX_API_ROOTPATH ${BIN_OUTPUT}/ffx-api)
+    set(FFX_API_PATHNAME_DX12D 		${FFX_API_ROOTPATH}/DebugDX12/amd_fidelityfx_dx12d)
+    set(FFX_API_PATHNAME_DX12DREL 	${FFX_API_ROOTPATH}/RelWithDebInfoDX12/amd_fidelityfx_dx12drel)
+    set(FFX_API_PATHNAME_DX12 		${FFX_API_ROOTPATH}/ReleaseDX12/amd_fidelityfx_dx12)
+    set(FFX_API_PATHNAME_VKD 		${FFX_API_ROOTPATH}/DebugVK/amd_fidelityfx_vkd)
+    set(FFX_API_PATHNAME_VKDREL 	${FFX_API_ROOTPATH}/RelWithDebInfoVK/amd_fidelityfx_vkdrel)
+    set(FFX_API_PATHNAME_VK 		${FFX_API_ROOTPATH}/ReleaseVK/amd_fidelityfx_vk)
 else()
+    message(STATUS "FFX_DEV_API is DISABLED - Using prebuilt signed DLLs from ${PREBUILT_SIGNED_DLL_ROOT}")
 	set(FFX_API_ROOTPATH ${PREBUILT_SIGNED_DLL_ROOT})
 	set(FFX_API_PATHNAME_DX12D 		${FFX_API_ROOTPATH}/amd_fidelityfx_dx12)
 	set(FFX_API_PATHNAME_DX12DREL 	${FFX_API_ROOTPATH}/amd_fidelityfx_dx12)
@@ -135,7 +139,6 @@ function(copyCommand list dest)
         message("Generating custom command for ${fullFileName}")
         add_custom_command(
             OUTPUT   ${dest}/${file}
-            PRE_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory ${dest}
             COMMAND ${CMAKE_COMMAND} -E copy ${fullFileName}  ${dest}
             MAIN_DEPENDENCY  ${fullFileName}
@@ -162,7 +165,6 @@ function(copyTargetCommand list dest returned_target_name)
         message("Generating custom command for ${fullFileName}")
         add_custom_command(
             OUTPUT   ${dest}/${file}
-            PRE_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory ${dest}
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${fullFileName} ${dest}
             MAIN_DEPENDENCY  ${fullFileName}

@@ -137,19 +137,19 @@ file(GLOB fidelityfx_parallelsort_shaderfiles
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../sdk/include/FidelityFX/gpu/parallelsort/ffx_parallelsort.h
 	${CMAKE_CURRENT_SOURCE_DIR}/../../../../sdk/include/FidelityFX/gpu/parallelsort/ffx_parallelsort_common.h)	
 
-set_source_files_properties(${shaderfiles} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${shaderfiles} PROPERTIES VS_TOOL_OVERRIDE "Text")
 # Copy shaders to bin directory
 copyCommand("${shaderfiles}" ${SHADER_OUTPUT})
 
-set_source_files_properties(${fidelityfx_common_shaderfiles} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${fidelityfx_common_shaderfiles} PROPERTIES VS_TOOL_OVERRIDE "Text")
 # Copy shaders to bin/shaders/fidelityfx directory
 copyCommand("${fidelityfx_common_shaderfiles}" ${SHADER_OUTPUT}/fidelityfx)
 
-set_source_files_properties(${fidelityfx_spd_shaderfiles} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${fidelityfx_spd_shaderfiles} PROPERTIES VS_TOOL_OVERRIDE "Text")
 # Copy shaders to bin/shaders/fidelityfx/spd directory
 copyCommand("${fidelityfx_spd_shaderfiles}" ${SHADER_OUTPUT}/fidelityfx/spd)
 
-set_source_files_properties(${fidelityfx_parallelsort_shaderfiles} PROPERTIES VS_TOOL_OVERRIDE "Text")
+# set_source_files_properties(${fidelityfx_parallelsort_shaderfiles} PROPERTIES VS_TOOL_OVERRIDE "Text")
 # Copy shaders to bin/shaders/fidelityfx/parallelsort directory
 copyCommand("${fidelityfx_parallelsort_shaderfiles}" ${SHADER_OUTPUT}/fidelityfx/parallelsort)
 
