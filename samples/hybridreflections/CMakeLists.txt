@@ -63,7 +63,7 @@ file(GLOB hsr_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.hlsl)
 
 # set_source_files_properties(${hsr_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
-copyShaderCommand("${hsr_shaders}" ${SHADER_OUTPUT} copied_hsr_shaders)
+copyCommand("${hsr_shaders}" ${SHADER_OUTPUT})
 
 # Add config file
 set(config_file ${CMAKE_CURRENT_SOURCE_DIR}/config/hybridreflectionsconfig.json)

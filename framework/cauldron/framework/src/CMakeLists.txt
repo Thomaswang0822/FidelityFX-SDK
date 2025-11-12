@@ -139,19 +139,19 @@ file(GLOB fidelityfx_parallelsort_shaderfiles
 
 # set_source_files_properties(${shaderfiles} PROPERTIES VS_TOOL_OVERRIDE "Text")
 # Copy shaders to bin directory
-copyShaderCommand("${shaderfiles}" ${SHADER_OUTPUT} copied_shaderfiles)
+copyCommand("${shaderfiles}" ${SHADER_OUTPUT})
 
 # set_source_files_properties(${fidelityfx_common_shaderfiles} PROPERTIES VS_TOOL_OVERRIDE "Text")
 # Copy shaders to bin/shaders/fidelityfx directory
-copyShaderCommand("${fidelityfx_common_shaderfiles}" ${SHADER_OUTPUT}/fidelityfx copied_fidelityfx_common_shaderfiles)
+copyCommand("${fidelityfx_common_shaderfiles}" ${SHADER_OUTPUT}/fidelityfx)
 
 # set_source_files_properties(${fidelityfx_spd_shaderfiles} PROPERTIES VS_TOOL_OVERRIDE "Text")
 # Copy shaders to bin/shaders/fidelityfx/spd directory
-copyShaderCommand("${fidelityfx_spd_shaderfiles}" ${SHADER_OUTPUT}/fidelityfx/spd copied_fidelityfx_spd_shaderfiles)
+copyCommand("${fidelityfx_spd_shaderfiles}" ${SHADER_OUTPUT}/fidelityfx/spd)
 
 # set_source_files_properties(${fidelityfx_parallelsort_shaderfiles} PROPERTIES VS_TOOL_OVERRIDE "Text")
 # Copy shaders to bin/shaders/fidelityfx/parallelsort directory
-copyShaderCommand("${fidelityfx_parallelsort_shaderfiles}" ${SHADER_OUTPUT}/fidelityfx/parallelsort copied_fidelityfx_parallelsort_shaderfiles)
+copyCommand("${fidelityfx_parallelsort_shaderfiles}" ${SHADER_OUTPUT}/fidelityfx/parallelsort)
 
 set(cauldronconfigfiles ${CMAKE_CURRENT_SOURCE_DIR}/../config/cauldronconfig.json)
 copyCommand("${cauldronconfigfiles}" ${CONFIG_OUTPUT})

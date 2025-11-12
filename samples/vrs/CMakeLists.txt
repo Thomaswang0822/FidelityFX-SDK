@@ -47,7 +47,7 @@ file(GLOB vrs_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.hlsl)
 
 # set_source_files_properties(${vrs_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
-copyShaderCommand("${vrs_shaders}" ${SHADER_OUTPUT} copied_vrs_shaders)
+copyCommand("${vrs_shaders}" ${SHADER_OUTPUT})
 
 # Add config file
 set(config_file ${CMAKE_CURRENT_SOURCE_DIR}/config/vrsconfig.json)

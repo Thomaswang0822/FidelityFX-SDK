@@ -62,19 +62,16 @@ set sdk_build_options=-DFFX_API_BACKEND=DX12_%arch% %sdk_build_options%
 :: Only build SDK separately if NOT in development mode; we are in
 echo Skipping SDK prebuild - SDK will be included in solution
 
-:: Check directories exist and create if not
-if not exist build\ (
-    mkdir build
-)
+:: Remove then create new
 
+if exist build\ (
+    rmdir /S /Q build\
+)
+if exist bin\ (
+    rmdir /S /Q bin\
+)
+mkdir build
 cd build
-:: Clear out CMakeCache
-if exist CMakeFiles\ (
-    rmdir /S /Q CMakeFiles
-)
-if exist CMakeCache.txt (
-    del /S /Q CMakeCache.txt
-)
 
 echo.
 echo Building SDK sample solutions %samples_build_options%

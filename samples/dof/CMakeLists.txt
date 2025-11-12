@@ -46,7 +46,7 @@ file(GLOB dof_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.hlsl)
 # set_source_files_properties(${dof_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
-copyShaderCommand("${dof_shaders}" ${SHADER_OUTPUT} copied_dof_shaders)
+copyCommand("${dof_shaders}" ${SHADER_OUTPUT})
 
 # Add config file
 set(config_file ${CMAKE_CURRENT_SOURCE_DIR}/config/dofconfig.json)

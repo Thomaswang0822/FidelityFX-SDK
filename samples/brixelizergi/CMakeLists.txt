@@ -63,7 +63,7 @@ copyCommand("${config_file}" ${CONFIG_OUTPUT})
 
 # Add shaders
 # set_source_files_properties(${brixelizer_gi_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
-copyShaderCommand("${brixelizer_gi_shaders}" ${SHADER_OUTPUT} copied_brixelizer_gi_shaders)
+copyCommand("${brixelizer_gi_shaders}" ${SHADER_OUTPUT})
 
 # Add the sample to the solution
 add_executable(${PROJECT_NAME} WIN32 ${default_icon_src} ${default_entry_point} ${default_sample_files} ${config_file} ${brixelizer_gi_src} ${brixelizer_gi_shaders} ${ffx_remap})

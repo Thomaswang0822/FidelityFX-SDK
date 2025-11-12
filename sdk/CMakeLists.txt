@@ -236,8 +236,8 @@ else()
 endif()
 
 # Include the common.cmake from root to use createConfig function
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/..)
-include(common)
+# list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/..)
+# include(common)
 
 # Set configuration types: use custom ones for dev mode, else keep standard
 if(FFX_DEV_API)

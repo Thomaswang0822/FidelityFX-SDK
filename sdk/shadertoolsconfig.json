@@ -1,0 +1,9 @@
+{
+    "hlsl.preprocessorDefinitions": {
+        "__hlsl_dx_compiler": 1,
+        "FFX_HLSL": 1
+},
+    "hlsl.additionalIncludeDirectories": [
+        "D:\\Code\\FSR3\\sdk\\include\\FidelityFX\\gpu"
+    ]
+}

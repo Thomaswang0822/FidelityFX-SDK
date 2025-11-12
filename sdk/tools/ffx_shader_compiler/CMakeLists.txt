@@ -67,7 +67,6 @@ function(copyCommand list dest)
         message("Generating custom command for ${fullFileName}")
         add_custom_command(
             OUTPUT   ${dest}/${file}
-            PRE_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory ${dest}
             COMMAND ${CMAKE_COMMAND} -E copy ${fullFileName}  ${dest}
             MAIN_DEPENDENCY  ${fullFileName}

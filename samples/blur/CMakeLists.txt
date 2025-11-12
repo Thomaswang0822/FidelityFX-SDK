@@ -46,7 +46,7 @@ file(GLOB blur_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.hlsl)
 # set_source_files_properties(${blur_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
-copyShaderCommand("${blur_shaders}" ${SHADER_OUTPUT} copied_blur_shaders)
+copyCommand("${blur_shaders}" ${SHADER_OUTPUT})
 
 # Add config file
 set(config_file ${CMAKE_CURRENT_SOURCE_DIR}/config/blurconfig.json)

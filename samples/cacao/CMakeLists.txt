@@ -51,7 +51,7 @@ file(GLOB cacao_shaders
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.hlsl)
 # set_source_files_properties(${cacao_shaders} PROPERTIES VS_TOOL_OVERRIDE "Text")
-copyShaderCommand("${cacao_shaders}" ${SHADER_OUTPUT} copied_cacao_shaders)
+copyCommand("${cacao_shaders}" ${SHADER_OUTPUT})
 
 # Add config file
 set(config_file ${CMAKE_CURRENT_SOURCE_DIR}/config/cacaoconfig.json)

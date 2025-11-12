@@ -20,6 +20,34 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+# Copies a set of files to a directory (only if they already don't exist or are different)
+#
+# Usage example:
+#     add_library(my_lib ...)
+#     set(media_src ${CMAKE_CURRENT_SOURCE_DIR}/../../media/brdfLut.dds )
+#     copyTargetCommand("${media_src}" ${CMAKE_HOME_DIRECTORY}/bin copied_media_src)
+#     add_dependencies(my_lib copied_media_src)
+#
+function(copyTargetCommand list dest returned_target_name)
+    set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+    foreach(fullFileName ${list})
+        get_filename_component(file ${fullFileName} NAME)
+        message("Generating custom command for ${fullFileName}")
+        add_custom_command(
+            OUTPUT   ${dest}/${file}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${dest}
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${fullFileName} ${dest}
+            MAIN_DEPENDENCY  ${fullFileName}
+            COMMENT "Updating ${file} into ${dest}"
+        )
+        list(APPEND dest_list ${dest}/${file})
+    endforeach()
+
+    add_custom_target(${returned_target_name} DEPENDS "${dest_list}")
+    set_target_properties(${returned_target_name} PROPERTIES FOLDER CopyTargets)
+endfunction()
+
 if(NOT FFX_DEV_API)
     add_library(pixlib SHARED IMPORTED GLOBAL)
     set_property(TARGET pixlib PROPERTY IMPORTED_IMPLIB ${CMAKE_CURRENT_SOURCE_DIR}/bin/${CMAKE_GENERATOR_PLATFORM}/WinPixEventRuntime.lib)
