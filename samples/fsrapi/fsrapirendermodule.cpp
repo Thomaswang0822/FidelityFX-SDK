@@ -50,8 +50,90 @@
 #define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING    // To avoid receiving deprecation error since we are using C++11 only
 #include <experimental/filesystem>
 #include <directx/d3dx12_core.h>
-#include <stb_image_write.h>
-#include "tinyexr.h"
+
+#include <unordered_map>
+
+/**
+ * Frame Interpolation SRV textures. 
+ * pair.first is our custom name used in building export filename;
+ * pair.second is the internal name used by shaders.
+ */
+namespace SRV_debug
+{
+    typedef std::pair<std::string, std::wstring> twinName;
+
+    static const twinName InputDepth{"InputDepth", L"r_input_depth"};
+    static const twinName InputMV{"InputMV", L"r_input_motion_vectors"};
+    static const twinName InputDF{"InputDF", L"r_input_distortion_field"};
+    static const twinName DilatedDepth{"DilatedDepth", L"r_dilated_depth"};
+    static const twinName DilatedMV{"DilatedMV", L"r_dilated_motion_vectors"};
+    static const twinName RecDepthPrev{"RecDepthPrev", L"r_reconstructed_depth_previous_frame"};
+    static const twinName RecDepthInterp{"RecDepthInterp", L"r_reconstructed_depth_interpolated_frame"};
+    /// 
+    static const twinName PrevInterpSource{"PrevInterpSource", L"r_previous_interpolation_source"};
+    static const twinName CurrInterpSource{"CurrInterpSource", L"r_current_interpolation_source"};
+    static const twinName DisMask{"DisMask", L"r_disocclusion_mask"};
+    static const twinName GameMV_X{"GameMV", L"r_game_motion_vector_field_x"};
+    static const twinName GameMV_Y{"GameMV", L"r_game_motion_vector_field_y"};
+    static const twinName OFlowMV_X{"OFlowMV", L"r_optical_flow_motion_vector_field_x"};
+    static const twinName OFlowMV_Y{"OFlowMV", L"r_optical_flow_motion_vector_field_y"};
+    static const twinName OFlowVec{"OFlowVec", L"r_optical_flow"};
+    static const twinName OFlowVecDebug{"OFlowVecDebug", L"r_optical_flow_vec_debug"};
+    static const twinName OFlowConf{"OFlowConf", L"r_optical_flow_confidence"};
+    static const twinName OFlowGlobalMotion{"OFlowGlobalMotion", L"r_optical_flow_global_motion"};
+    static const twinName OFlowSCD{"OFlowSCD", L"r_optical_flow_scd"};
+    static const twinName Output{"Output", L"r_output"};
+    static const twinName InpaintingMask{"InpaintingMask", L"r_inpainting_mask"};
+    static const twinName InpaintingPyramid{"InpaintingPyramid", L"r_inpainting_pyramid"};
+    static const twinName PresentBB{"PresentBB", L"r_present_backbuffer"};
+    static const twinName COUNTERS{"COUNTERS", L"r_counters"};
+
+    // unordered_set will auto remove duplicates
+    static const std::unordered_set<std::string> Uint32MVs = {
+        GameMV_X.first, 
+        GameMV_Y.first, 
+        OFlowMV_X.first, 
+        OFlowMV_Y.first
+    };
+
+    static const std::unordered_set<std::string> FP16MVs = {
+        InputMV.first,
+        DilatedMV.first,
+        OFlowVecDebug.first,
+    };
+
+    /// #define SCD_OUTPUT_SCENE_CHANGE_SLOT         0
+    /// #define SCD_OUTPUT_HISTORY_BITS_SLOT         1
+    /// #define SCD_OUTPUT_COMPLETED_WORKGROUPS_SLOT 2
+    static const std::array<std::wstring, 3> ValueNamesSCD = {L"SCENE_CHANGE", L"HISTORY_BITS", L"COMPLETED_WORKGROUPS"};
+    static const std::array<std::wstring, 2> ValueNamesDF  = {L"X", L"Y"};
+
+    static bool LogValues(const void* data, cauldron::ExportInfo::BitUnpackMode mode, size_t frameID)
+    {
+        if (mode == cauldron::ExportInfo::BitUnpackMode::LogSCD) {
+            const uint32_t* pValues = reinterpret_cast<const uint32_t*>(data);
+            cauldron::CauldronWarning(L"Frame %d %s values: %s = %d, %s = %d, %s = %d.",
+                frameID, StringToWString(OFlowSCD.first).c_str(),
+                ValueNamesSCD[0].c_str(), pValues[0],
+                ValueNamesSCD[1].c_str(), pValues[1],
+                ValueNamesSCD[2].c_str(), pValues[2]
+            );
+            return true;
+        }
+        else if (mode == cauldron::ExportInfo::BitUnpackMode::LogDF) {
+            const uint8_t* pValues = reinterpret_cast<const uint8_t*>(data);
+            cauldron::CauldronWarning(L"Frame %d %s values: %s = %d, %s = %d.",
+                frameID, StringToWString(InputDF.first).c_str(),
+                ValueNamesDF[0].c_str(), pValues[0],
+                ValueNamesDF[1].c_str(), pValues[1]
+            );
+            return true;
+        }
+
+        // If not any "direct log" SRV, keep success = false s.t. we proceed to export EXR.
+        return false;
+    }
+}  // namespace TextureNames
 
 using namespace std;
 using namespace cauldron;
@@ -138,9 +220,6 @@ bool FSRRenderModule::LoadHackTextures()
             if (type == EXRTextureDataBlock::SpecialChannelType::ColorRGB)
             {
                 loaded = textureDB->LoadTextureData(textureInfo.TextureFile, textureInfo.AlphaThreshold, textureDesc);
-
-                // DEBUG
-                //loaded = textureDB->CreateDebugCoordinateTexture(textureDesc);
             }
             else
             {
@@ -149,11 +228,11 @@ bool FSRRenderModule::LoadHackTextures()
             CauldronAssert(ASSERT_CRITICAL, loaded, L"Hack texture %s loaded failed", textureLoadPaths[typeIdx].c_str());
             // then copy
             hackTargets[typeIdx]->back()->CopyData(textureDB.get());
+
         }  // end of each texture
     }  // end of all textures of one type
 
-    /// instead of using:
-    /// GetContentManager()->LoadTextures();
+    //CheckHackColors("AfterLoad");
 
     return true;
 }
@@ -421,22 +500,25 @@ void FSRRenderModule::Init(const json& initData)
     // Finish up init
 
     /// Hacked upscale ratio needs to be set before the SwitchUpscaler() call below
-    switch (GetFramework()->GetConfig()->HackOptions.displayResolution)
+    if (GetFramework()->GetConfig()->HackOptions.enableHack)
     {
-    case CauldronConfig::HackOptionDef::HackDisplayResolution::DR_1K:
-        m_CurScale    = FSRScalePreset::NativeAA;
-        m_ScalePreset = FSRScalePreset::NativeAA;
-        break;
-    case CauldronConfig::HackOptionDef::HackDisplayResolution::DR_2K:
-        m_CurScale    = FSRScalePreset::Quality;
-        m_ScalePreset = FSRScalePreset::Quality;
-        break;
-    case CauldronConfig::HackOptionDef::HackDisplayResolution::DR_4K:
-        m_CurScale    = FSRScalePreset::Performance;
-        m_ScalePreset = FSRScalePreset::Performance;
-        break;
-    default:
-        break;
+        switch (GetFramework()->GetConfig()->HackOptions.displayResolution)
+        {
+        case CauldronConfig::HackOptionDef::HackDisplayResolution::DR_1K:
+            m_CurScale    = FSRScalePreset::NativeAA;
+            m_ScalePreset = FSRScalePreset::NativeAA;
+            break;
+        case CauldronConfig::HackOptionDef::HackDisplayResolution::DR_2K:
+            m_CurScale    = FSRScalePreset::Quality;
+            m_ScalePreset = FSRScalePreset::Quality;
+            break;
+        case CauldronConfig::HackOptionDef::HackDisplayResolution::DR_4K:
+            m_CurScale    = FSRScalePreset::Performance;
+            m_ScalePreset = FSRScalePreset::Performance;
+            break;
+        default:
+            break;
+        }
     }
 
     SwitchUpscaler(m_UiUpscaleMethod);
@@ -834,34 +916,56 @@ void FSRRenderModule::InitUI(UISection* pUISection)
 
             ffx::Configure(m_SwapChainContext, m_swapchainKeyValueConfig);
         }));
-
-    EnableModule(true);
+    
+    /// This InitUI will becalled before SwitchUpscaler(), which will call both
+    /// EnableModule(false) and EnableModule(true). Thus it's unnecessary to call with false here.
+    //EnableModule(true);
 }
 
-bool FSRRenderModule::ExportGeneratedFrame(const FfxApiResource& fgOutput)
+bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, const size_t skipN, std::string customName)
 {
     const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
-    size_t      frameID     = GetFramework()->GetFrameID();
+    size_t      frameID     = m_FrameID;
 
-    /// When calling at the end of Execute(), we skip m_kSkipFramesN frames to align with actual displayed frame since:
+    /// When calling at the end of Execute(), we skip frames to align with actual displayed frame.
+    /// For FG, this is 3
     /// Frame 0 and 1 are empty;
     /// Frame 2 are not-yet interpolated real frame 0
     /// 
+    /// For SR (before FG), this is 1
+    /// 
+    /// For inputs (actual API resource to bind inputs, instead of our Debug resources), no skip
+    ///  
     /// hackOptions.storeOutput should be checked before calling
-    if (frameID < m_kSkipFramesN || frameID >= hackOptions.outputMaxCount + m_kSkipFramesN)
-        return true;
-    frameID -= m_kSkipFramesN;
+    std::string suffix = [skipN]() { 
+        if (skipN == m_kSkipFramesInput)
+            return "input";
+        else if (skipN == m_kSkipFramesSR)
+            return "sr";
+        else if (skipN == m_kSkipFramesFG)
+            return "fg";
+        else
+            return "WRONG";
+    }();
 
-    const ResourceState resourceState = SDKWrapper::GetFrameworkState(static_cast<FfxResourceStates>(fgOutput.state));
-    const TextureDesc   textureDesc   = SDKWrapper::GetFrameworkTextureDescription(fgOutput.description);
-    GPUResource*        resource      = GPUResource::GetWrappedResourceFromSDK(
-        L"FrameInterpolationOutput", fgOutput.resource, &textureDesc, resourceState);
+    size_t outputCount = hackOptions.enableHack ? hackOptions.outputMaxCount : 15;
     
-    std::experimental::filesystem::path outputPath(hackOptions.outPath);
+    if (frameID < skipN + outputCount || frameID >= 2 * outputCount + skipN)
+    //if (frameID >= outputCount)
+        return true;
+    frameID -= skipN + outputCount;
+
+    const ResourceState resourceState = SDKWrapper::GetFrameworkState(static_cast<FfxResourceStates>(debugResource.state));
+    const TextureDesc   textureDesc   = SDKWrapper::GetFrameworkTextureDescription(debugResource.description);
+    GPUResource*        resource      = GPUResource::GetWrappedResourceFromSDK(
+        StringToWString(customName).c_str(), debugResource.resource, &textureDesc, resourceState);
+    
+    std::experimental::filesystem::path outputPath(hackOptions.outPath != L"" ? hackOptions.outPath : L"../media/TEST_SCENE/outputs");
     // construct the full filename as <output_dir>/<identifier>_<frame_id formatted to 3 digits>.exr
     std::string idString = std::to_string(frameID);
-    std::string filename = hackOptions.identifier + "_" + std::string(3 - idString.length(), '0') +
-        idString + ".exr";
+    std::string filename = 
+        (customName == "" ? hackOptions.identifier : customName) + "_" + 
+        std::string(3 - idString.length(), '0') + idString + suffix + ".exr";
     outputPath.append(filename);
     // Adapted from SwapChain::DumpAllToFile()
     {
@@ -886,9 +990,13 @@ bool FSRRenderModule::ExportGeneratedFrame(const FfxApiResource& fgOutput)
         GetDevice()->GetImpl()->DX12Device()->CreateCommittedResource(
             &readBackHeapProperties, D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&pResourceReadBack));
 
-        CommandList* pCmdList = GetDevice()->CreateCommandList(L"SwapchainToFileCL", CommandQueue::Graphics);
-        Barrier      barrier  = Barrier::Transition(resource, resourceState, ResourceState::CopySource);
-        ResourceBarrier(pCmdList, 1, &barrier);
+        CommandList* pCmdList = GetDevice()->CreateCommandList(L"DebugFrameToFileCL", CommandQueue::Graphics);
+        
+        // Only transition if not already in CopySource state
+        if (resourceState != ResourceState::CopySource) {
+            Barrier barrier = Barrier::Transition(resource, resourceState, ResourceState::CopySource);
+            ResourceBarrier(pCmdList, 1, &barrier);
+        }
 
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout[1]             = {0};
         uint32_t                           num_rows[1]           = {0};
@@ -915,12 +1023,23 @@ bool FSRRenderModule::ExportGeneratedFrame(const FfxApiResource& fgOutput)
         CloseHandle(mHandleFenceEvent);
         pFence->Release();
 
-        UINT64*     pTimingsBuffer = NULL;
+        UINT64*     pData = NULL;
         D3D12_RANGE range;
         range.Begin = 0;
         range.End   = uploadHeapSize;
-        pResourceReadBack->Map(0, &range, reinterpret_cast<void**>(&pTimingsBuffer));
-        stbi_write_jpg(WStringToString(outputPath.c_str()).c_str(), (int)fromDesc.Width, (int)fromDesc.Height, 4, pTimingsBuffer, 100);
+        CauldronThrowOnFail(pResourceReadBack->Map(0, &range, reinterpret_cast<void**>(&pData)));
+        ExportInfo info = {
+            textureDesc.Width, textureDesc.Height, layout[0].Footprint.RowPitch, 
+            NumChannelsFromFormat(textureDesc.Format),
+            customName == "" ? hackOptions.identifier : customName,
+            outputPath.string()
+        };
+        UpdateExportInfo(info);
+        bool success = SRV_debug::LogValues(pData, info.unpackMode, frameID);
+        // Short circuit export if only logging values.
+        success = success || DispatchTemplateExport(textureDesc.Format, pData, info);
+        CauldronAssert(ASSERT_CRITICAL, success, L"Failed to export FSR frame to %ls", outputPath.c_str());
+
         pResourceReadBack->Unmap(0, NULL);
 
         GetDevice()->FlushAllCommandQueues();
@@ -930,9 +1049,11 @@ bool FSRRenderModule::ExportGeneratedFrame(const FfxApiResource& fgOutput)
         pResourceReadBack = nullptr;
         //delete pCmdList;
 
-        // we transit it back from CopySource to UnorderedAccess.
-        Barrier barrierBack  = Barrier::Transition(resource, ResourceState::CopySource, ResourceState::UnorderedAccess);
-        ResourceBarrier(pCmdList, 1, &barrierBack);
+        // Only transition back if we originally transitioned it
+        if (resourceState != ResourceState::CopySource) {
+            Barrier barrierBack = Barrier::Transition(resource, ResourceState::CopySource, resourceState);
+            ResourceBarrier(pCmdList, 1, &barrierBack);
+        }
         delete pCmdList;
     }
 
@@ -941,74 +1062,143 @@ bool FSRRenderModule::ExportGeneratedFrame(const FfxApiResource& fgOutput)
     return true;
 }
 
-bool FSRRenderModule::ExportMotionVectors(const FfxApiResource& fgMV)
+bool FSRRenderModule::ExportDebugFrame2Inputs(
+    const FfxApiResource& debugResource1, 
+    const FfxApiResource& debugResource2, 
+    const size_t skipN, 
+    std::string customName)
 {
     const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
     size_t      frameID     = GetFramework()->GetFrameID();
 
-    /// When calling at the end of Execute(), we skip m_kSkipFramesN frames to align with actual displayed frame since:
+    /// When calling at the end of Execute(), we skip frames to align with actual displayed frame.
+    /// For FG, this is 3
     /// Frame 0 and 1 are empty;
     /// Frame 2 are not-yet interpolated real frame 0
     ///
+    /// For SR (before FG), this is 1
+    ///
+    /// For inputs (actual API resource to bind inputs, instead of our Debug resources), no skip
+    ///
     /// hackOptions.storeOutput should be checked before calling
-    //if (frameID < m_kSkipFramesN || frameID >= hackOptions.outputMaxCount + m_kSkipFramesN)
-    //    return true;
-    //frameID -= m_kSkipFramesN;
+    std::string suffix = [skipN]() {
+        if (skipN == m_kSkipFramesInput)
+            return "input";
+        else if (skipN == m_kSkipFramesSR)
+            return "sr";
+        else if (skipN == m_kSkipFramesFG)
+            return "fg";
+        else
+            return "WRONG";
+    }();
 
-    if (frameID >= 20)
+    size_t outputCount = hackOptions.enableHack ? hackOptions.outputMaxCount : 15;
+
+    if (frameID < skipN + outputCount || frameID >= 2 * outputCount + skipN)
         return true;
+    frameID -= skipN + outputCount;
 
-    const ResourceState resourceState = SDKWrapper::GetFrameworkState(static_cast<FfxResourceStates>(fgMV.state));
-    const TextureDesc   textureDesc   = SDKWrapper::GetFrameworkTextureDescription(fgMV.description);
-    GPUResource*        resource      = GPUResource::GetWrappedResourceFromSDK(L"fgMV", fgMV.resource, &textureDesc, resourceState);
+    // Get both resources
+    const ResourceState resourceState1 = SDKWrapper::GetFrameworkState(static_cast<FfxResourceStates>(debugResource1.state));
+    const TextureDesc   textureDesc1   = SDKWrapper::GetFrameworkTextureDescription(debugResource1.description);
+    GPUResource*        resource1      = GPUResource::GetWrappedResourceFromSDK(L"debugResource1", debugResource1.resource, &textureDesc1, resourceState1);
 
-    std::experimental::filesystem::path outputPath(hackOptions.outPath);
-    // construct the full filename as <output_dir>/<identifier>_<frame_id>.exr
-    std::string filename = hackOptions.identifier + "_" + std::to_string(frameID) + "-" + std::to_string(frameID + 1) + ".exr";
+    const ResourceState resourceState2 = SDKWrapper::GetFrameworkState(static_cast<FfxResourceStates>(debugResource2.state));
+    const TextureDesc   textureDesc2   = SDKWrapper::GetFrameworkTextureDescription(debugResource2.description);
+    GPUResource*        resource2      = GPUResource::GetWrappedResourceFromSDK(L"debugResource2", debugResource2.resource, &textureDesc2, resourceState2);
+
+    /// NEW: do a sanity check on number of original channels. For now we only support (1,1)
+    /// After this check, most parameters are the same.
+    uint32_t nCh = NumChannelsFromFormat(textureDesc1.Format);
+    bool     sameFormat = (textureDesc1.Format == textureDesc2.Format) &&
+                          (textureDesc1.getDim() == textureDesc2.getDim());    
+    CauldronAssert(ASSERT_CRITICAL, (nCh == 1 && sameFormat), L"ExportDebugFrame2Inputs only supports (1，1) input format for now.");
+
+
+    std::experimental::filesystem::path outputPath(hackOptions.enableHack ? hackOptions.outPath : L"../media/TEST_SCENE/outputs");
+    // construct the full filename as <output_dir>/<identifier>_<frame_id formatted to 3 digits>.exr
+    std::string idString = std::to_string(frameID);
+    std::string filename =
+        (customName == "" ? hackOptions.identifier : customName) + "_" + std::string(3 - idString.length(), '0') + idString + suffix + ".exr";
     outputPath.append(filename);
 
     // Adapted from SwapChain::DumpAllToFile()
     {
-        D3D12_RESOURCE_DESC fromDesc = resource->GetImpl()->DX12Desc();
+        D3D12_RESOURCE_DESC fromDesc1 = resource1->GetImpl()->DX12Desc();
+        D3D12_RESOURCE_DESC fromDesc2 = resource2->GetImpl()->DX12Desc();
 
         CD3DX12_HEAP_PROPERTIES readBackHeapProperties(D3D12_HEAP_TYPE_READBACK);
 
-        D3D12_RESOURCE_DESC bufferDesc = {};
-        bufferDesc.Alignment           = 0;
-        bufferDesc.DepthOrArraySize    = 1;
-        bufferDesc.Dimension           = D3D12_RESOURCE_DIMENSION_BUFFER;
-        bufferDesc.Flags               = D3D12_RESOURCE_FLAG_NONE;
-        bufferDesc.Format              = DXGI_FORMAT_UNKNOWN;
-        bufferDesc.Height              = 1;
-        bufferDesc.Width               = fromDesc.Width * fromDesc.Height * GetResourceFormatStride(textureDesc.Format);
-        bufferDesc.Layout              = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-        bufferDesc.MipLevels           = 1;
-        bufferDesc.SampleDesc.Count    = 1;
-        bufferDesc.SampleDesc.Quality  = 0;
+        // Create readback buffer for MV
+        D3D12_RESOURCE_DESC bufferDesc1 = {};
+        bufferDesc1.Alignment           = 0;
+        bufferDesc1.DepthOrArraySize    = 1;
+        bufferDesc1.Dimension           = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufferDesc1.Flags               = D3D12_RESOURCE_FLAG_NONE;
+        bufferDesc1.Format              = DXGI_FORMAT_UNKNOWN;
+        bufferDesc1.Height              = 1;
+        bufferDesc1.Width               = fromDesc1.Width * fromDesc1.Height * GetResourceFormatStride(textureDesc1.Format);
+        bufferDesc1.Layout              = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        bufferDesc1.MipLevels           = 1;
+        bufferDesc1.SampleDesc.Count    = 1;
+        bufferDesc1.SampleDesc.Quality  = 0;
 
-        ID3D12Resource* pResourceReadBack = nullptr;
+        ID3D12Resource* pResourceReadBack1 = nullptr;
         GetDevice()->GetImpl()->DX12Device()->CreateCommittedResource(
-            &readBackHeapProperties, D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&pResourceReadBack));
+            &readBackHeapProperties, D3D12_HEAP_FLAG_NONE, &bufferDesc1, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&pResourceReadBack1));
 
-        CommandList* pCmdList = GetDevice()->CreateCommandList(L"HackMVToFileCL", CommandQueue::Graphics);
-        // transition to CopySource
-        Barrier      barrier  = Barrier::Transition(resource, resourceState, ResourceState::CopySource);
-        ResourceBarrier(pCmdList, 1, &barrier);
+        // Create readback buffer for Depth
+        D3D12_RESOURCE_DESC bufferDesc2 = {};
+        bufferDesc2.Alignment           = 0;
+        bufferDesc2.DepthOrArraySize    = 1;
+        bufferDesc2.Dimension           = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufferDesc2.Flags               = D3D12_RESOURCE_FLAG_NONE;
+        bufferDesc2.Format              = DXGI_FORMAT_UNKNOWN;
+        bufferDesc2.Height              = 1;
+        bufferDesc2.Width               = fromDesc2.Width * fromDesc2.Height * GetResourceFormatStride(textureDesc2.Format);
+        bufferDesc2.Layout              = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        bufferDesc2.MipLevels           = 1;
+        bufferDesc2.SampleDesc.Count    = 1;
+        bufferDesc2.SampleDesc.Quality  = 0;
 
-        // the actual copy operation
-        D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout[1]             = {0};
-        uint32_t                           num_rows[1]           = {0};
-        UINT64                             row_sizes_in_bytes[1] = {0};
-        UINT64                             uploadHeapSize        = 0;
-        GetDevice()->GetImpl()->DX12Device()->GetCopyableFootprints(&fromDesc, 0, 1, 0, layout, num_rows, row_sizes_in_bytes, &uploadHeapSize);
+        ID3D12Resource* pResourceReadBack2 = nullptr;
+        GetDevice()->GetImpl()->DX12Device()->CreateCommittedResource(
+            &readBackHeapProperties, D3D12_HEAP_FLAG_NONE, &bufferDesc2, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&pResourceReadBack2));
 
-        CD3DX12_TEXTURE_COPY_LOCATION copyDest(pResourceReadBack, layout[0]);
-        CD3DX12_TEXTURE_COPY_LOCATION copySrc(resource->GetImpl()->DX12Resource(), 0);
-        pCmdList->GetImpl()->DX12CmdList()->CopyTextureRegion(&copyDest, 0, 0, 0, &copySrc, nullptr);
+        CommandList* pCmdList = GetDevice()->CreateCommandList(L"DebugFrame2InputsToFileCL", CommandQueue::Graphics);
 
-        // we transit it back from CopySource to original.
-        Barrier barrierBack = Barrier::Transition(resource, ResourceState::CopySource, resourceState);
-        ResourceBarrier(pCmdList, 1, &barrierBack);
+        // Transition both resources to CopySource
+        Barrier barriers[2] = {Barrier::Transition(resource1, resourceState1, ResourceState::CopySource),
+                               Barrier::Transition(resource2, resourceState2, ResourceState::CopySource)};
+        ResourceBarrier(pCmdList, 2, barriers);
+
+        // Copy MV resource
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout1       = {0};
+        uint32_t                           numRows1        = 0;
+        UINT64                             rowSizeInBytes1 = 0;
+        UINT64                             uploadHeapSize1 = 0;
+        GetDevice()->GetImpl()->DX12Device()->GetCopyableFootprints(&fromDesc1, 0, 1, 0, &layout1, &numRows1, &rowSizeInBytes1, &uploadHeapSize1);
+
+        CD3DX12_TEXTURE_COPY_LOCATION copyDest1(pResourceReadBack1, layout1);
+        CD3DX12_TEXTURE_COPY_LOCATION copySrc1(resource1->GetImpl()->DX12Resource(), 0);
+        pCmdList->GetImpl()->DX12CmdList()->CopyTextureRegion(&copyDest1, 0, 0, 0, &copySrc1, nullptr);
+
+        // Copy Depth resource
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout2         = {0};
+        uint32_t                           numRows2        = 0;
+        UINT64                             rowSizeInBytes2 = 0;
+        UINT64                             uploadHeapSize2 = 0;
+        GetDevice()->GetImpl()->DX12Device()->GetCopyableFootprints(
+            &fromDesc2, 0, 1, 0, &layout2, &numRows2, &rowSizeInBytes2, &uploadHeapSize2);
+
+        CD3DX12_TEXTURE_COPY_LOCATION copyDest2(pResourceReadBack2, layout2);
+        CD3DX12_TEXTURE_COPY_LOCATION copySrc2(resource2->GetImpl()->DX12Resource(), 0);
+        pCmdList->GetImpl()->DX12CmdList()->CopyTextureRegion(&copyDest2, 0, 0, 0, &copySrc2, nullptr);
+
+        // Transition both resources back to their original states
+        Barrier barriersBack[2] = {Barrier::Transition(resource1, ResourceState::CopySource, resourceState1),
+                                   Barrier::Transition(resource2, ResourceState::CopySource, resourceState2)};
+        ResourceBarrier(pCmdList, 1, barriersBack);
 
         ID3D12Fence* pFence;
         CauldronThrowOnFail(GetDevice()->GetImpl()->DX12Device()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pFence)));
@@ -1025,110 +1215,104 @@ bool FSRRenderModule::ExportMotionVectors(const FfxApiResource& fgMV)
         CloseHandle(mHandleFenceEvent);
         pFence->Release();
 
-        UINT64*     pTimingsBuffer = NULL;
-        D3D12_RANGE range;
-        range.Begin = 0;
-        range.End   = uploadHeapSize;
-        pResourceReadBack->Map(0, &range, reinterpret_cast<void**>(&pTimingsBuffer));
-        //stbi_write_jpg(WStringToString(outputPath.c_str()).c_str(), (int)fromDesc.Width, (int)fromDesc.Height, 4, pTimingsBuffer, 100);
-        SaveMotionVectorsToEXR(
-            pTimingsBuffer,
-            static_cast<uint32_t>(layout[0].Footprint.RowPitch),
-            static_cast<int>(fromDesc.Width),
-            static_cast<int>(fromDesc.Height),
-            WStringToString(outputPath.c_str()));
-        pResourceReadBack->Unmap(0, NULL);
+        // Map both buffers and save to EXR
+        UINT64* pData1 = nullptr;
+        UINT64* pData2 = nullptr;
+
+        D3D12_RANGE range1 = {0, uploadHeapSize1};
+        pResourceReadBack1->Map(0, &range1, reinterpret_cast<void**>(&pData1));
+
+        D3D12_RANGE range2 = {0, uploadHeapSize2};
+        pResourceReadBack2->Map(0, &range2, reinterpret_cast<void**>(&pData2));
+
+        // Blend the data to {X0, Y0, X1, Y1, ...}
+        uint32_t             elementSize = 0;
+        ResourceFormat       blendedFormat(ResourceFormat::Unknown);
+        if (textureDesc1.Format == ResourceFormat::R16_FLOAT) {
+            elementSize = 2;  // uint16_t
+            blendedFormat = ResourceFormat::RG16_FLOAT;
+        }
+        else if (textureDesc1.Format == ResourceFormat::R32_FLOAT ||
+                 textureDesc1.Format == ResourceFormat::R32_UINT) {
+            elementSize = 4;  // float
+            blendedFormat = ResourceFormat::RG32_FLOAT;
+        }
+        else
+        {
+            CauldronError(L"ExportDebugFrame2Inputs only supports R16_FLOAT, R32_UINT, and R32_FLOAT for now.");
+            return false;
+        }
+        std::vector<uint8_t> blendedData(textureDesc1.Width * textureDesc1.Height * 2 * elementSize);
+        {
+            const uint8_t* data1Bytes   = reinterpret_cast<const uint8_t*>(pData1);
+            const uint8_t* data2Bytes   = reinterpret_cast<const uint8_t*>(pData2);
+            uint8_t*       blendedBytes = blendedData.data();
+
+            for (size_t y = 0; y < textureDesc1.Height; y++)
+            {
+                const uint8_t* srcRowX = data1Bytes + y * layout1.Footprint.RowPitch;
+                const uint8_t* srcRowY = data2Bytes + y * layout1.Footprint.RowPitch;
+                uint8_t*       dstRow  = blendedBytes + y * (textureDesc1.Width * 2 * elementSize);
+
+                for (size_t x = 0; x < textureDesc1.Width; x++)
+                {
+                    // Copy X component
+                    memcpy(dstRow + (x * 2) * elementSize, srcRowX + x * elementSize, elementSize);
+                    // Copy Y component
+                    memcpy(dstRow + (x * 2 + 1) * elementSize, srcRowY + x * elementSize, elementSize);
+                }
+            }
+        }
+
+        ExportInfo info = {
+            textureDesc1.Width, textureDesc1.Height, 
+            textureDesc1.Width * 2 * elementSize, 
+            NumChannelsFromFormat(textureDesc1.Format) * 2,
+            customName == "" ? hackOptions.identifier : customName,
+            outputPath.string()
+        };
+        UpdateExportInfo(info);
+
+        bool success = DispatchTemplateExport(blendedFormat, blendedData.data(), info);
+        CauldronAssert(ASSERT_CRITICAL, success, L"Failed to export FSR frame to %ls", outputPath.c_str());
+
+
+        pResourceReadBack1->Unmap(0, NULL);
+        pResourceReadBack2->Unmap(0, NULL);
 
         GetDevice()->FlushAllCommandQueues();
 
-        // Release
-        pResourceReadBack->Release();
-        pResourceReadBack = nullptr;
-
-
+        // Release resources
+        pResourceReadBack1->Release();
+        pResourceReadBack2->Release();
         delete pCmdList;
     }
 
-    delete resource;
+    delete resource1;
+    delete resource2;
     return true;
 }
 
-bool FSRRenderModule::SaveMotionVectorsToEXR(
-    const void* pData,
-    const uint32_t rowPitch,
-    const int width,
-    const int height,
-    const std::string& filename)
-{
-    EXRHeader header;
-    InitEXRHeader(&header);
-    EXRImage exrImage;
-    InitEXRImage(&exrImage);
-
-    // Configure EXR header for motion vectors (2 channels)
-    header.num_channels = 2;
-    header.channels = new EXRChannelInfo[header.num_channels];
-    header.pixel_types = new int[header.num_channels];
-    header.requested_pixel_types = new int[header.num_channels];
-
-    // Set channel names
-    const char* channelNames[] = {"U", "V"};
-    for (int i = 0; i < header.num_channels; i++) {
-        strncpy(header.channels[i].name, channelNames[i], 255);
-        header.pixel_types[i] = TINYEXR_PIXELTYPE_HALF;
-        header.requested_pixel_types[i] = TINYEXR_PIXELTYPE_HALF;
+void FSRRenderModule::UpdateExportInfo(ExportInfo& info) {
+    using namespace SRV_debug;
+    if (Uint32MVs.find(info.name) != Uint32MVs.end())
+    {
+        info.unpackMode = ExportInfo::BitUnpackMode::MV_Uint32;
+        CauldronAssert(ASSERT_CRITICAL, info.numSourceChannels == 2, L"MV_Uint32 export requires 2 channels.");
     }
-
-    header.compression_type = TINYEXR_COMPRESSIONTYPE_NONE;
-
-    // Configure EXR image
-    exrImage.num_channels = header.num_channels;
-    exrImage.width = width;
-    exrImage.height = height;
-
-    // Allocate planar arrays for U and V channels
-    std::vector<std::vector<uint16_t>> channelData(2);
-    channelData[0].resize(width * height); // U channel
-    channelData[1].resize(width * height); // V channel
-
-    // Calculate row pitch in terms of uint16_t elements
-    const size_t rowPitchElements = rowPitch / sizeof(uint16_t);
-    const uint16_t* u16Data = reinterpret_cast<const uint16_t*>(pData);
-
-    // Deinterleave pixel data into planar format
-    for (uint32_t y = 0; y < height; y++) {
-        const uint16_t* srcRow = u16Data + y * rowPitchElements;
-        
-        for (uint32_t x = 0; x < width; x++) {
-            const size_t dstIdx = y * width + x;
-            channelData[0][dstIdx] = srcRow[x * 2];     // U component
-            channelData[1][dstIdx] = srcRow[x * 2 + 1]; // V component
-        }
+    else if (FP16MVs.find(info.name) != FP16MVs.end())
+    {
+        info.unpackMode = ExportInfo::BitUnpackMode::MV_Remap;
+        CauldronAssert(ASSERT_CRITICAL, info.numSourceChannels == 2, L"MV_Remap export requires 2 channels.");
     }
-
-    // Prepare channel pointers for EXR
-    std::vector<unsigned char*> imagePtrs(header.num_channels);
-    imagePtrs[0] = reinterpret_cast<unsigned char*>(channelData[0].data());
-    imagePtrs[1] = reinterpret_cast<unsigned char*>(channelData[1].data());
-    exrImage.images = imagePtrs.data();
-
-    // Save EXR file
-    const char* err = nullptr;
-    int ret = SaveEXRImageToFile(&exrImage, &header, filename.c_str(), &err);
-    bool success = (ret == TINYEXR_SUCCESS);
-
-    // Cleanup
-    delete[] header.channels;
-    delete[] header.pixel_types;
-    delete[] header.requested_pixel_types;
-
-    if (!success && err) {
-        // Handle error (log or throw)
-        FreeEXRErrorMessage(err);
-        return false;
+    else if (info.name == OFlowSCD.first)
+    {
+        info.unpackMode = ExportInfo::BitUnpackMode::LogSCD;
     }
-
-    return success;
+    else if (info.name == InputDF.first)
+    {
+        info.unpackMode = ExportInfo::BitUnpackMode::LogDF;
+    }
 }
 
 void FSRRenderModule::SwitchUpscaler(int32_t newUpscaler)
@@ -1603,6 +1787,21 @@ void FSRRenderModule::OnPreFrame()
     }
 }
 
+bool FSRRenderModule::DebugCheck(std::string marker)
+{
+    if (m_pHackColors.empty())
+        return true;
+
+    auto origFrameID = m_FrameID;
+    m_FrameID         = 15;
+    auto hackTexture  = m_pHackColors.front()->GetResource();
+    auto currentState = hackTexture->GetCurrentResourceState();
+    bool success = ExportDebugFrame(SDKWrapper::ffxGetResourceApi(hackTexture, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ), m_kSkipFramesInput, marker);
+    m_FrameID = origFrameID;
+
+    return success;
+}
+
 void FSRRenderModule::OnResize(const ResolutionInfo& resInfo)
 {
     if (!ModuleEnabled())
@@ -1618,6 +1817,9 @@ void FSRRenderModule::OnResize(const ResolutionInfo& resInfo)
 
 void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
 {
+    constexpr float CustomFPS = 1000.f / 60;
+    constexpr float Radian90  = 1.578f;
+    //std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     if (!ModuleReady())
         return;
     if (m_pHudLessTexture[m_curUiTextureIndex]->GetResource()->GetCurrentResourceState() != ResourceState::NonPixelShaderResource)
@@ -1642,8 +1844,14 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
 
     GPUResource* pSwapchainBackbuffer = GetFramework()->GetSwapChain()->GetBackBufferRT()->GetCurrentResource();
     FfxApiResource backbuffer            = SDKWrapper::ffxGetResourceApi(pSwapchainBackbuffer, FFX_API_RESOURCE_STATE_PRESENT);
-
+    
     // copy input source to temp so that the input and output texture of the upscalers is different 
+    const auto& colorDesc = m_pColorTarget->GetDesc();
+    const auto& tempDesc  = m_pTempTexture->GetDesc();
+    if (GetFramework()->GetConfig()->HackOptions.enableHack)
+        const auto& hackDesc  = m_pHackColors[0]->GetDesc();
+    const auto& mvDesc    = m_pMotionVectors->GetDesc();
+    const auto& depthDesc = m_pDepthTarget->GetDesc();
     {
         std::vector<Barrier> barriers;
         barriers.push_back(Barrier::Transition(
@@ -1673,25 +1881,65 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
     // If they become changeable at runtime, we'll need to modify how this information is queried
     static bool s_InvertedDepth = GetConfig()->InvertedDepth;
 
-    uint64_t hackIdx;
-    if (GetFramework()->GetConfig()->HackOptions.enableHack)
+    const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
+    // use this to temporarily define export-related varaibles when hack is off but you want export.
+    if (!hackOptions.enableHack)
+    {
+        const_cast<CauldronConfig::HackOptionDef&>(hackOptions).storeOutput    = false;
+        const_cast<CauldronConfig::HackOptionDef&>(hackOptions).outputMaxCount = 15;
+        const_cast<CauldronConfig::HackOptionDef&>(hackOptions).identifier     = "DefaultSceneBB";
+        const_cast<CauldronConfig::HackOptionDef&>(hackOptions).outPath        = L"../media/EmptySanityCheck/Horizontal/outputs";
+    }
+    uint64_t hackIdx = 0;
+    if (hackOptions.enableHack)
     {
         // loop thru hacking textures depending on frameID
         hackIdx          = m_FrameID % m_pHackColors.size();
-        if (GetFramework()->GetConfig()->HackOptions.parseJitter)
+        if (hackOptions.parseJitter)
         {
             m_JitterX = m_pHackJitterXY[hackIdx].first;
             m_JitterY = m_pHackJitterXY[hackIdx].second;
         }
     }
 
-    //auto descColor = m_pColorTarget->GetDesc();
-    //auto descHackColor = m_pHackColors[0]->GetDesc();
+    /// Before any FSR dispatch, we can export any FSR input.
+    if (false)  // manually turn on/off
+    {
+        auto hackTexture   = m_pHackColors[m_FrameID % m_pHackColors.size()]->GetResource();
+        //auto hackTexture  = m_pTempTexture->GetResource();
+        auto currentState = hackTexture->GetCurrentResourceState();
+        bool exportSuccess =
+            ExportDebugFrame(SDKWrapper::ffxGetResourceApi(hackTexture, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ), m_kSkipFramesInput, "ColorHack");
+        goto finishup;
+    }
+    //goto finishup;
 
     // Upscale the scene first
     if (m_UpscaleMethod == Upscaler_Native)
     {
         // Native, nothing to do
+
+        if (hackOptions.enableHack)
+        {
+            // copy hackColor to colorTarget
+            std::vector<Barrier> barriers;
+            barriers.push_back(Barrier::Transition(
+                m_pColorTarget->GetResource(), ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource, ResourceState::CopyDest));
+            barriers.push_back(Barrier::Transition(
+                m_pHackColors[hackIdx]->GetResource(), ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource, ResourceState::CopySource));
+            ResourceBarrier(pCmdList, static_cast<uint32_t>(barriers.size()), barriers.data());
+
+            TextureCopyDesc desc(m_pHackColors[hackIdx]->GetResource(), m_pColorTarget->GetResource());
+            CopyTextureRegion(pCmdList, &desc);
+
+            barriers.clear();
+            barriers.push_back(Barrier::Transition(
+                m_pColorTarget->GetResource(), ResourceState::CopyDest, ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource));
+            barriers.push_back(Barrier::Transition(
+                m_pHackColors[hackIdx]->GetResource(), ResourceState::CopySource, ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource));
+            ResourceBarrier(pCmdList, static_cast<uint32_t>(barriers.size()), barriers.data());
+        }
+
     }
 
     if (m_UpscaleMethod == Upscaler_FSRAPI)
@@ -1706,8 +1954,7 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         dispatchUpscale.commandList = pCmdList->GetImpl()->VKCmdBuffer();
 #endif  // defined(FFX_API_DX12)
 
-        //if (false)
-        if (GetFramework()->GetConfig()->HackOptions.enableHack)
+        if (hackOptions.enableHack)
         {
             dispatchUpscale.color         = SDKWrapper::ffxGetResourceApi(m_pHackColors[hackIdx]->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
             dispatchUpscale.depth         = SDKWrapper::ffxGetResourceApi(m_pHackDepths[hackIdx]->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
@@ -1722,7 +1969,7 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         dispatchUpscale.exposure = SDKWrapper::ffxGetResourceApi(nullptr, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
         dispatchUpscale.output = SDKWrapper::ffxGetResourceApi(m_pColorTarget->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 
-        if (m_MaskMode != FSRMaskMode::Disabled)
+        if (m_MaskMode != FSRMaskMode::Disabled && !hackOptions.enableHack)
         {
             dispatchUpscale.reactive = SDKWrapper::ffxGetResourceApi(m_pReactiveMask->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
         }
@@ -1731,7 +1978,7 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
             dispatchUpscale.reactive = SDKWrapper::ffxGetResourceApi(nullptr, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
         }
 
-        if (m_UseMask)
+        if (m_UseMask && !hackOptions.enableHack)
         {
             dispatchUpscale.transparencyAndComposition =
                 SDKWrapper::ffxGetResourceApi(m_pCompositionMask->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
@@ -1751,16 +1998,16 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         dispatchUpscale.sharpness = m_Sharpness;
 
         // Cauldron keeps time in seconds, but FSR expects milliseconds
-        dispatchUpscale.frameTimeDelta = static_cast<float>(deltaTime * 1000.f);
+        dispatchUpscale.frameTimeDelta = hackOptions.enableHack? CustomFPS : static_cast<float>(deltaTime * 1000.f);
 
-        dispatchUpscale.preExposure = GetScene()->GetSceneExposure();
+        dispatchUpscale.preExposure = hackOptions.enableHack ? 1.0f : GetScene()->GetSceneExposure();
         dispatchUpscale.renderSize.width = resInfo.RenderWidth;
         dispatchUpscale.renderSize.height = resInfo.RenderHeight;
         dispatchUpscale.upscaleSize.width = resInfo.UpscaleWidth;
         dispatchUpscale.upscaleSize.height = resInfo.UpscaleHeight;
 
         // Setup camera params as required
-        dispatchUpscale.cameraFovAngleVertical = pCamera->GetFovY();
+        dispatchUpscale.cameraFovAngleVertical = hackOptions.enableHack ? Radian90 : pCamera->GetFovY();
 
         if (s_InvertedDepth)
         {
@@ -1778,6 +2025,14 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
 
         ffx::ReturnCode retCode = ffx::Dispatch(m_UpscalingContext, dispatchUpscale);
         CauldronAssert(ASSERT_CRITICAL, !!retCode, L"Dispatching FSR upscaling failed: %d", (uint32_t)retCode);
+    
+        // After SR but before FG, we can look at SR output.
+        if (false) // manually turn on/off
+        {
+            //bool exportSuccess = ExportDebugFrame(dispatchUpscale.motionVectors, m_kSkipFramesInput, "OriginalMV");
+            bool exportSuccess = ExportDebugFrame(dispatchUpscale.output, m_kSkipFramesSR, "SR_Outputs");
+            CauldronAssert(ASSERT_ERROR, exportSuccess, L"export MV and Depth failed");
+        }
     }
 
     if (m_FrameInterpolationAvailable)
@@ -1790,8 +2045,7 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         dispatchFgPrep.commandList = pCmdList->GetImpl()->VKCmdBuffer();
 #endif  // defined(FFX_API_DX12)
 
-        //if (false)
-        if (GetFramework()->GetConfig()->HackOptions.enableHack)
+        if (hackOptions.enableHack)
         {
             dispatchFgPrep.depth         = SDKWrapper::ffxGetResourceApi(m_pHackDepths[hackIdx]->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
             dispatchFgPrep.motionVectors = SDKWrapper::ffxGetResourceApi(m_pHackMVs[hackIdx]->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
@@ -1809,11 +2063,11 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         dispatchFgPrep.motionVectorScale.y = resInfo.fRenderHeight();
 
         // Cauldron keeps time in seconds, but FSR expects milliseconds
-        dispatchFgPrep.frameTimeDelta = static_cast<float>(deltaTime * 1000.f);
+        dispatchFgPrep.frameTimeDelta = hackOptions.enableHack ? CustomFPS : static_cast<float>(deltaTime * 1000.f);
 
         dispatchFgPrep.renderSize.width       = resInfo.RenderWidth;
         dispatchFgPrep.renderSize.height      = resInfo.RenderHeight;
-        dispatchFgPrep.cameraFovAngleVertical = pCamera->GetFovY();
+        dispatchFgPrep.cameraFovAngleVertical = hackOptions.enableHack ? Radian90 : pCamera->GetFovY();
 
         if (s_InvertedDepth)
         {
@@ -1885,6 +2139,7 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         CauldronAssert(ASSERT_CRITICAL, !!retCode, L"Configuring FSR FG failed: %d", (uint32_t)retCode);
 
         ffx::DispatchDescFrameGenerationPrepareCameraInfo cameraConfig{};
+        /// Tracing the shader, no camera data are used other than near and far (for depth)
         memcpy(cameraConfig.cameraPosition, &pCamera->GetCameraPos(), 3 * sizeof(float));
         memcpy(cameraConfig.cameraUp, &pCamera->GetCameraUp(), 3 * sizeof(float));
         memcpy(cameraConfig.cameraRight, &pCamera->GetCameraRight(), 3 * sizeof(float));
@@ -1909,9 +2164,6 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         uiConfig.flags      = m_DoublebufferInSwapchain ? FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING : 0;
         ffx::Configure(m_SwapChainContext, uiConfig);
 #endif  // defined(FFX_API_DX12)
-
-        //bool exportSuccess = ExportMotionVectors(dispatchFgPrep.motionVectors);
-
     }
 
     // Dispatch frame generation, if not using the callback
@@ -1919,18 +2171,28 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
     {
         ffx::DispatchDescFrameGeneration dispatchFg{};
 
-        /// No hack here. Instead, hack before upscaling, which will store upscaled hack texture in backbuffer.
-        /// When testing FG w/o upscaling, turn on Upscaler_FSRAPI while setting upscale ratio to 1.0.
-        //if (GetFramework()->GetConfig()->HackOptions.enableHack)
-        if (false)
-        {
-            dispatchFg.presentColor = SDKWrapper::ffxGetResourceApi(m_pHackColors[hackIdx]->GetResource(), FFX_API_RESOURCE_STATE_PRESENT);
-        }
-        else
-        {
-            dispatchFg.presentColor = backbuffer;
-        }
+        /// Tricky Issue:
+        /// Here, what gets binded to FG input is swapchain backbuffer instead of m_pColorTarget, 
+        /// which is output of SR and makes more sense to be FG input.
+        /// This is because FG outputs are binded to swapchain (see ffx::Query below) and swapchain BB stores
+        /// post-tonemapped data while m_pColorTarget stores pre-tonemapped data (see ToneMappingRenderModule::Init
+        /// in tonemappingrendermodule.cpp).
+        /// 
+        /// If using m_pColorTarget as inputs, there will be obvious brightness/exposure difference b/w 
+        /// SR output and SR+FG output because:
+        /// 1. m_pColorTarget stores pre-tonemapped SR output, and post-tonemapped SR output in swapchain BB is displayed.
+        /// 2. If using m_pColorTarget as FG input, FG output is also pre-tonemapped, but it is stored directly
+        ///    to swapchain BB (likely in another slot) and thus gets displayed in pre-tonemapped.
+        /// 
+        /// The fix is to let swapchain BB stores the pre-tonemapped data consistent with m_pColorTarget.
+        /// This is done by directly texture copy and skip everything normally done in tonemapping RM.
+        /// We should only do this when we want to export pre-tonemapped FG output.
+        dispatchFg.presentColor = backbuffer;
+        //dispatchFg.presentColor = SDKWrapper::ffxGetResourceApi(m_pColorTarget->GetResource(), FFX_API_RESOURCE_STATE_PRESENT);
+
         dispatchFg.numGeneratedFrames = 1;
+        //if (hackOptions.enableHack)
+        //    dispatchFg.backbufferTransferFunction = static_cast<uint32_t>(FfxBackbufferTransferFunction::FFX_BACKBUFFER_TRANSFER_FUNCTION_SCRGB);
 
         // assume symmetric letterbox
         dispatchFg.generationRect.left = (resInfo.DisplayWidth - resInfo.UpscaleWidth) / 2;
@@ -1962,14 +2224,39 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         ffx::ReturnCode retCode = ffx::Dispatch(m_FrameGenContext, dispatchFg);
         
         CauldronAssert(ASSERT_CRITICAL, !!retCode, L"Dispatching Frame Generation failed: %d", (uint32_t)retCode);
-        const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
         if (hackOptions.storeOutput)
         {
-            bool exportSuccess = ExportGeneratedFrame(dispatchFg.outputs[0]);
+            bool exportSuccess = ExportDebugFrame(dispatchFg.outputs[0], m_kSkipFramesFG);
             CauldronAssert(ASSERT_CRITICAL, exportSuccess, L"Export failed at frame %d", GetFramework()->GetFrameID());
+        }
+
+        if (hackOptions.storeOutput)
+        {
+            // frameID check is done in export function
+            bool exportSuccess = ExportDebugFrame(dispatchFg.outputs[0], m_kSkipFramesFG);
+        }
+
+        // Other than saving FG frames, we can look at any resources used by FG, see SRV_debug at top of the file.
+        if (false)  // manually turn on/off
+        {
+            bool exportSuccess = ExportDebugFrame(
+                dispatchFg.DebugApiResources[SRV_debug::CurrInterpSource.second], 
+                m_kSkipFramesFG, 
+                SRV_debug::CurrInterpSource.first + ""
+            );
+
+            //bool exportSuccess = ExportDebugFrame(dispatchFg.presentColor, m_kSkipFramesFG, "inputFG");
+
+            //bool exportSuccess = ExportDebugFrame2Inputs(
+            //    dispatchFg.DebugApiResources[SRV_debug::OFlowMV_X.second],
+            //    dispatchFg.DebugApiResources[SRV_debug::OFlowMV_Y.second], 
+            //    m_kSkipFramesFG, 
+            //    SRV_debug::OFlowMV_X.first);
+            CauldronAssert(ASSERT_ERROR, exportSuccess, L"ExportDebugFrame() failed");
         }
     }
 
+finishup:
     m_FrameID += uint64_t(1 + m_SimulatePresentSkip);
     m_SimulatePresentSkip = false;
 

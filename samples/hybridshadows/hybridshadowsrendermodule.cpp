@@ -43,6 +43,7 @@ using namespace cauldron;
 
 static const Texture* CreateBlueNoiseTexture()
 {
+    typedef unsigned char byte;
     byte blueNoise[128][128][4] = {};
 
     for (int x = 0; x < 128; ++x)

@@ -22,12 +22,13 @@
             "Fullscreen": false,
             "Width": 3840,
             "Height": 2160,
-            "Mode": "DISPLAYMODE_LDR"
+            "Mode": "DISPLAYMODE_HDR10_SCRGB",
+            "SwapchainFormat": "RGBA16_FLOAT"
         },
 
         "RenderResources": {
             "HDR11Color": {
-                "Format": "RGBA8_UNORM",
+                "Format": "RGBA16_FLOAT",
                 "AllowUAV": true
             },
             "DepthTarget": {
@@ -44,12 +45,12 @@
                 "RenderResolution": false
             },
             "HudlessTarget0": {
-                "Format": "RGBA8_UNORM",
+                "Format": "RGBA16_FLOAT",
                 "AllowUAV": true,
                 "RenderResolution": false
             },
             "HudlessTarget1": {
-                "Format": "RGBA8_UNORM",
+                "Format": "RGBA16_FLOAT",
                 "AllowUAV": true,
                 "RenderResolution": false
             }
@@ -92,15 +93,15 @@
             "SceneExposure": 1.0
         },
 
-      "HackOptions": {
-        "EnableHack": true,
-        "Identifier": "NativeAA_TEST",
-        "DisplayResolution": 4,
-        "ParseJitter": true,
-        "HackPaths": "../media/TEST_SCENE/NPP_JI",
-        "StoreOutput": true,
-        "OutputMaxCount": 10,
-        "OutputPath": "../media/TEST_SCENE/outputs_TEST"
-      }
+        "HackOptions": {
+            "EnableHack": true,
+            "Identifier": "Generated",
+            "DisplayResolution": 4,
+            "ParseJitter": true,
+            "HackPaths": "../media/EmptySanityCheck/Horizontal/NPP_JI_selection",
+            "StoreOutput": true,
+            "OutputMaxCount": 15,
+            "OutputPath": "../media/EmptySanityCheck/Horizontal/outputs"
+        }
     }
 }

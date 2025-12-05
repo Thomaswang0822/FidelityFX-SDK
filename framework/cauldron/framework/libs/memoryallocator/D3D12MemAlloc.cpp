@@ -6434,6 +6434,7 @@ HRESULT AllocatorPimpl::CreateResource(
     hr = E_INVALIDARG;
     if (committedAllocationParams.IsValid() && preferCommitted)
     {
+        // RGBA16_FLoat comes here
         hr = AllocateCommittedResource(committedAllocationParams,
             resAllocInfo.SizeInBytes, withinBudget, pAllocDesc->pPrivateData,
             finalCreateParams, ppAllocation, riidResource, ppvResource);
@@ -6442,6 +6443,7 @@ HRESULT AllocatorPimpl::CreateResource(
     }
     if (blockVector != NULL)
     {
+        // RGBA8_UNORM comes here
         hr = blockVector->CreateResource(resAllocInfo.SizeInBytes, resAllocInfo.Alignment,
             *pAllocDesc, finalCreateParams,
             ppAllocation, riidResource, ppvResource);
@@ -7438,7 +7440,10 @@ HRESULT AllocatorPimpl::CalcAllocationParams(const ALLOCATION_DESC& allocDesc, U
             }
             else if (allocSize > preferredBlockSize / 2)
             {
-                // Heuristics: Allocate committed memory if requested size if greater than half of preferred block size.
+                // Heuristics: Allocate committed memory if requested size is greater than half of preferred block size.
+                
+                // DEBUG Note: preferredBlockSize is likely fixed (or GPU VRAM specific) to 0x4000000 = 64MB
+                // 4K RGBA16_Float texture, which has allocSize = 0x3fc0000 > half of preferredBlockSize, goes here.
                 outPreferCommitted = true;
             }
         }

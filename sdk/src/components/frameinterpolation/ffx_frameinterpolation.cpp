@@ -66,6 +66,7 @@ static const ResourceBinding srvResourceBindingTable[] =
     {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_MOTION_VECTOR_FIELD_Y,         L"r_optical_flow_motion_vector_field_y"},
 
     {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_VECTOR,                        L"r_optical_flow"},
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_5,                                 L"r_optical_flow_vec_debug"},
     {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_CONFIDENCE,                    L"r_optical_flow_confidence"},
     {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_GLOBAL_MOTION,                 L"r_optical_flow_global_motion"},
     {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_SCENE_CHANGE_DETECTION,        L"r_optical_flow_scd"},
@@ -480,6 +481,22 @@ static FfxErrorCode frameinterpolationCreate(FfxFrameInterpolationContext_Privat
             FFX_SURFACE_FORMAT_R8G8_UNORM, contextDescription->maxRenderSize.width, contextDescription->maxRenderSize.height, 1,    FFX_RESOURCE_FLAGS_ALIASABLE, {FFX_RESOURCE_INIT_DATA_TYPE_UNINITIALIZED}},
         {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_DEFAULT_DISTORTION_FIELD, L"FI_DefaultDistortionField", FFX_RESOURCE_TYPE_TEXTURE2D, FFX_RESOURCE_USAGE_READ_ONLY,
             FFX_SURFACE_FORMAT_R8G8_UNORM, 1, 1, 1, FFX_RESOURCE_FLAGS_NONE, FfxResourceInitData::FfxResourceInitBuffer(sizeof(defaultDistortionFieldData), defaultDistortionFieldData) },
+
+        // create a texture to copy FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_VECTOR content
+        {
+            FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_5,
+            L"FI_OpticalFlowDebugVector",
+            FFX_RESOURCE_TYPE_TEXTURE2D,
+            FFX_RESOURCE_USAGE_UAV,
+            FFX_SURFACE_FORMAT_R16G16_SINT,
+            //(contextDescription->maxRenderSize.width + 7) / 8,
+            //(contextDescription->maxRenderSize.height + 7) / 8,
+            contextDescription->maxRenderSize.width,
+            contextDescription->maxRenderSize.height,
+            1,
+            FFX_RESOURCE_FLAGS_ALIASABLE,
+            { FFX_RESOURCE_INIT_DATA_TYPE_UNINITIALIZED }
+        },
 
     };
 
@@ -899,6 +916,8 @@ FFX_API FfxErrorCode ffxFrameInterpolationPrepare(FfxFrameInterpolationContext* 
     uint32_t                              renderDispatchSizeX = uint32_t(params->renderSize.width + 7) / 8;
     uint32_t                              renderDispatchSizeY = uint32_t(params->renderSize.height + 7) / 8;
 
+    /// 2 SRV: input MV & Depth
+    /// 3 UAV: Dilated MV & Depth, RecDepth Prev
     scheduleDispatch(contextPrivate, &contextPrivate->pipelineFiReconstructAndDilate, renderDispatchSizeX, renderDispatchSizeY);
 
     contextPrivate->contextDescription.backendInterface.fpExecuteGpuJobs(&contextPrivate->contextDescription.backendInterface, params->commandList, contextPrivate->effectContextId);
@@ -1060,7 +1079,7 @@ FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext*
         contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_CONFIDENCE]             = {};
         contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_GLOBAL_MOTION]          = {};
         contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_SCENE_CHANGE_DETECTION] = {};
-        contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_VECTOR] = {};
+        contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_VECTOR]                 = {};
     }
 
     if (bUseExternalDistortionFieldResource)
@@ -1106,9 +1125,11 @@ FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext*
             contextPrivate->contextDescription.backendInterface.fpScheduleGpuJob(&contextPrivate->contextDescription.backendInterface, &discardJob);
         }
 
+        /// 1 SRV: OFlow SCD
+        /// 5 UAV: Disocclusion Mask, Game MV X&Y, OFlow MV X&Y (CLEAR them)
         scheduleDispatch(contextPrivate, &contextPrivate->pipelineFiSetup, renderDispatchSizeX, renderDispatchSizeY);
 
-            // game vector field inpainting pyramid
+        // game vector field inpainting pyramid
         auto scheduleDispatchGameVectorFieldInpaintingPyramid = [&]() {
             // Auto exposure
             uint32_t dispatchThreadGroupCountXY[2];
@@ -1129,6 +1150,8 @@ FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext*
                 sizeof(contextPrivate->inpaintingPyramidContants),
                 &contextPrivate->constantBuffers[FFX_FRAMEINTERPOLATION_INPAINTING_PYRAMID_CONSTANTBUFFER_IDENTIFIER]);
 
+            /// 2 SRV: Game MV X&Y
+            /// C UAV: Inpainting Pyramid Mipmap 0-11 (why no 12?)
             scheduleDispatch(
                 contextPrivate, &contextPrivate->pipelineGameVectorFieldInpaintingPyramid, dispatchThreadGroupCountXY[0], dispatchThreadGroupCountXY[1]);
         };
@@ -1151,16 +1174,27 @@ FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext*
                 contextPrivate->contextDescription.backendInterface.fpScheduleGpuJob(&contextPrivate->contextDescription.backendInterface, &clearJob);
             }
 
+            /// 3 SRV: Dilated MV & Depth, Distortion Field
+            /// 1 UAV: RecDepth Interp
             scheduleDispatch(contextPrivate, &contextPrivate->pipelineFiReconstructPreviousDepth, renderDispatchSizeX, renderDispatchSizeY);
+            
+            /// 5 SRV: curr & prev interp source, dilated MV & depth, distortion field
+            /// 2 UAV: Game MV X&Y
             scheduleDispatch(contextPrivate, &contextPrivate->pipelineFiGameMotionVectorField, renderDispatchSizeX, renderDispatchSizeY);
 
             scheduleDispatchGameVectorFieldInpaintingPyramid();
 
+            /// 3 SRV: curr & prev interp source, OFlow Vector
+            /// 2 UAV: OFlow MV X&Y
             scheduleDispatch(contextPrivate, &contextPrivate->pipelineFiOpticalFlowVectorField, opticalFlowDispatchSizeX, opticalFlowDispatchSizeY);
 
+            /// 7 SRV: Dilated Depth, RecDepth Prev & Interp, Game MV X&Y, Inpainting Pyramid, Distortion Field
+            /// 1 UAV: Disocclusion Mask
             scheduleDispatch(contextPrivate, &contextPrivate->pipelineFiDisocclusionMask, renderDispatchSizeX, renderDispatchSizeY);
         }
 
+        /// 8 SRV: curr & prev interp source, Disocclusion Mask, Game MV X&Y, OFlow MV X&Y, Inpainting Pyramid
+        /// 1 UAV: Output
         scheduleDispatch(contextPrivate, &contextPrivate->pipelineFiScfi, displayDispatchSizeX, displayDispatchSizeY);
 
         // inpainting pyramid
@@ -1184,14 +1218,20 @@ FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext*
                 sizeof(contextPrivate->inpaintingPyramidContants),
                 &contextPrivate->constantBuffers[FFX_FRAMEINTERPOLATION_INPAINTING_PYRAMID_CONSTANTBUFFER_IDENTIFIER]);
 
+            /// 1 SRV: Output
+            /// C UAV: Inpainting Pyramid Mipmap 0-11 (why no 12?)
             scheduleDispatch(contextPrivate, &contextPrivate->pipelineInpaintingPyramid, dispatchThreadGroupCountXY[0], dispatchThreadGroupCountXY[1]);
         }
 
+        /// 4 SRV: curr interp source, OFlow SCD, Inpainting Pyramid, Present BB
+        /// 1 UAV: Output
         scheduleDispatch(contextPrivate, &contextPrivate->pipelineInpainting, displayDispatchSizeX, displayDispatchSizeY);
 
         if (params->flags & FFX_FRAMEINTERPOLATION_DISPATCH_DRAW_DEBUG_VIEW)
         {
             scheduleDispatchGameVectorFieldInpaintingPyramid();
+            /// 9 SRV: curr interp source, Disocclusion Mask,  Game MV X&Y, OFlow MV X&Y, Inpainting Pyramid, Present BB, Distortion Field
+            /// 1 UAV: Output
             scheduleDispatch(contextPrivate, &contextPrivate->pipelineDebugView, displayDispatchSizeX, displayDispatchSizeY);
         }
 
@@ -1200,6 +1240,22 @@ FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext*
             FfxGpuJobDescription copyJobs[] = { {FFX_GPU_JOB_COPY} };
             FfxResourceInternal  copySources[_countof(copyJobs)] = { contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_CURRENT_INTERPOLATION_SOURCE] };
             FfxResourceInternal destSources[_countof(copyJobs)] = { contextPrivate->uavResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_PREVIOUS_INTERPOLATION_SOURCE] };
+
+            for (int i = 0; i < _countof(copyJobs); ++i)
+            {
+                copyJobs[i].copyJobDescriptor.src = copySources[i];
+                copyJobs[i].copyJobDescriptor.dst = destSources[i];
+                contextPrivate->contextDescription.backendInterface.fpScheduleGpuJob(&contextPrivate->contextDescription.backendInterface, &copyJobs[i]);
+            }
+        }
+
+        // DEBUG: copy OFlow Vector to our Debug resource, similar to above
+        {
+            FfxGpuJobDescription copyJobs[]                      = {{FFX_GPU_JOB_COPY}};
+            FfxResourceInternal  copySources[_countof(copyJobs)] = {
+                contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_VECTOR]};
+            FfxResourceInternal destSources[_countof(copyJobs)]  = {
+                contextPrivate->uavResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_5]};
 
             for (int i = 0; i < _countof(copyJobs); ++i)
             {
@@ -1232,8 +1288,10 @@ FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext*
 
             const FfxInternalResourceStates* currentSurfaceDescription = &internalSurfaceDesc[currentSurfaceIndex];
             FfxResourceStates initialState = FFX_RESOURCE_STATE_UNORDERED_ACCESS;
-            if (currentSurfaceDescription->usage == FFX_RESOURCE_USAGE_READ_ONLY) initialState = FFX_RESOURCE_STATE_COMPUTE_READ;
-            if (currentSurfaceDescription->usage == FFX_RESOURCE_USAGE_RENDERTARGET) initialState = FFX_RESOURCE_STATE_RENDER_TARGET;
+            if (currentSurfaceDescription->usage == FFX_RESOURCE_USAGE_READ_ONLY) 
+                initialState = FFX_RESOURCE_STATE_COMPUTE_READ;
+            if (currentSurfaceDescription->usage == FFX_RESOURCE_USAGE_RENDERTARGET) 
+                initialState = FFX_RESOURCE_STATE_RENDER_TARGET;
 
             FfxGpuJobDescription barrier = {FFX_GPU_JOB_BARRIER};
             barrier.barrierDescriptor.resource = contextPrivate->srvResources[currentSurfaceDescription->id];
@@ -1245,6 +1303,16 @@ FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext*
 
         // schedule optical flow and frame interpolation
         contextPrivate->contextDescription.backendInterface.fpExecuteGpuJobs(&contextPrivate->contextDescription.backendInterface, params->commandList, contextPrivate->effectContextId);
+    }
+
+    // DEBUG: write to our debug check resources
+    for (const auto& binding : srvResourceBindingTable) {
+        std::wstring name(binding.name);
+        const_cast<FfxFrameInterpolationDispatchDescription*>(params)->DebugSRV[name] = 
+            contextPrivate->contextDescription.backendInterface.fpGetResource(
+                &contextPrivate->contextDescription.backendInterface, 
+                contextPrivate->srvResources[binding.index]
+            );
     }
 
     // release dynamic resources

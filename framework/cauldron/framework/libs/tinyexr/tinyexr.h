@@ -7808,7 +7808,7 @@ float ToneMap(float hdrValue, float exposure = 1.f)
 }
 
 /**
- * @brief   Given the raw HALF direct read by tinyexr, pack them to RGBA8_UNORM format.
+ * @brief   Given the raw HALF directly read by tinyexr, pack them to RGBA8_UNORM format.
  * NOTE: 8_UNORM uses 8 bits to represent 0-255
  */
 uint32_t PackRGBA8(uint16_t r, uint16_t g, uint16_t b, uint16_t a)

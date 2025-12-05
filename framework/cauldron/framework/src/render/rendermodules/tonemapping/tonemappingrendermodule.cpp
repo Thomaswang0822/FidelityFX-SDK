@@ -241,6 +241,39 @@ ToneMappingRenderModule::~ToneMappingRenderModule()
 
 void ToneMappingRenderModule::Execute(double deltaTime, CommandList* pCmdList)
 {
+    const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
+    if (hackOptions.storeOutput)
+    {
+        /// Direct texture copy and skip all tonemapping when we need pre-tonemapped FG output.
+        /// For more details, see `dispatchFg.presentColor = backbuffer;` in FSRRenderModule::Execute()
+        {
+            std::vector<Barrier> barriers;
+            barriers.push_back(Barrier::Transition(
+                m_pRenderTargetOut->GetResource(), ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource, ResourceState::CopyDest));
+            barriers.push_back(Barrier::Transition(
+                m_pRenderTargetIn->GetResource(), ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource, ResourceState::CopySource));
+            ResourceBarrier(pCmdList, static_cast<uint32_t>(barriers.size()), barriers.data());
+        }
+
+        {
+            GPUScopedProfileCapture sampleMarker(pCmdList, L"TonemappingDirectCopyHDR");
+
+            TextureCopyDesc desc(m_pRenderTargetIn->GetResource(), m_pRenderTargetOut->GetResource());
+            CopyTextureRegion(pCmdList, &desc);
+        }
+
+        {
+            std::vector<Barrier> barriers;
+            barriers.push_back(Barrier::Transition(
+                m_pRenderTargetOut->GetResource(), ResourceState::CopyDest, ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource));
+            barriers.push_back(Barrier::Transition(
+                m_pRenderTargetIn->GetResource(), ResourceState::CopySource, ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource));
+            ResourceBarrier(pCmdList, static_cast<uint32_t>(barriers.size()), barriers.data());
+        }
+
+        return;
+    }
+
     // If display mode is set to FSHDR_SCRGB or HDR10_SCRGB, set default "Tone Mapper" GUI option value to "No Tonemapper"
     if (GetFramework()->GetSwapChain()->GetSwapChainDisplayMode() == DisplayMode::DISPLAYMODE_FSHDR_SCRGB ||
         GetFramework()->GetSwapChain()->GetSwapChainDisplayMode() == DisplayMode::DISPLAYMODE_HDR10_SCRGB)

@@ -71,6 +71,8 @@ public:
     void EnableModule(bool enabled) override;
     void OnPreFrame() override;
 
+    virtual bool DebugCheck(std::string marker) override;
+
     /**
      * @brief   Setup parameters that the FSR API needs this frame and then call the FFX Dispatch.
      */
@@ -108,11 +110,17 @@ public:
      * 
      * \return success?
      */
-    bool ExportGeneratedFrame(const FfxApiResource& fgOutput);
+    bool ExportDebugFrame(
+        const FfxApiResource& resource, 
+        const size_t          skipN, 
+        std::string           customName = "");
+    bool ExportDebugFrame2Inputs(
+        const FfxApiResource& resource1, 
+        const FfxApiResource& resource2, 
+        const size_t          skipN,
+        std::string           customName = "");
 
-    bool ExportMotionVectors(const FfxApiResource& fgMV);
-    bool SaveMotionVectorsToEXR(
-        const void* pData, const uint32_t rowPitch, const int width, const int height, const std::string& filename);
+    void UpdateExportInfo(cauldron::ExportInfo& info);
 
     void SetFilter(int32_t method)
     {
@@ -185,7 +193,7 @@ private:
     float           m_UpscaleRatio    = 2.f;
     float           m_LetterboxRatio  = 1.f;
     float           m_MipBias         = cMipBias[static_cast<uint32_t>(FSRScalePreset::NativeAA)];
-    FSRMaskMode     m_MaskMode        = FSRMaskMode::Manual;
+    FSRMaskMode     m_MaskMode        = FSRMaskMode::Auto;
     float           m_Sharpness       = 0.8f;
     uint32_t        m_JitterIndex     = 0;
     float           m_JitterX         = 0.f;
@@ -208,9 +216,11 @@ private:
     bool m_EnableAsyncCompute                       = true;
     bool m_AllowAsyncCompute                        = true;
     bool m_PendingEnableAsyncCompute                = true;
+    /// Originally set to true, but not using callback gives us more explicit control.
+    /// See .cpp line 2140
     bool m_UseCallback                              = false;
-    bool m_DrawFrameGenerationDebugTearLines        = true;
-    bool m_DrawFrameGenerationDebugResetIndicators  = true;
+    bool m_DrawFrameGenerationDebugTearLines        = false;
+    bool m_DrawFrameGenerationDebugResetIndicators  = false;
     bool m_DrawFrameGenerationDebugPacingLines      = false;
     bool m_DrawFrameGenerationDebugView             = false;
     bool m_DrawUpscalerDebugView                    = false;
@@ -251,8 +261,10 @@ private:
     std::vector<cauldron::Texture*> m_pHackMVs    = {};
     std::vector<cauldron::Texture*> m_pHackDepths = {};
     std::vector<std::pair<float, float>> m_pHackJitterXY    = {};
-    // see ExportGeneratedFrame()
-    const size_t                         m_kSkipFramesN  = 3;
+    // see ExportDebugFrame()
+    static constexpr size_t   m_kSkipFramesInput       = 0;
+    static constexpr size_t   m_kSkipFramesSR          = 1;
+    static constexpr size_t   m_kSkipFramesFG          = 3;
 
     // Raster views for reactive/composition masks
     std::vector<const cauldron::RasterView*> m_RasterViews           = {};

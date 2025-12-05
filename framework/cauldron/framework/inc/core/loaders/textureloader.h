@@ -74,6 +74,72 @@ namespace cauldron
         void* AdditionalParams = nullptr;                                                               ///< Additional parameters needed for the load completion callback. This memory is owned by the calling process.
     };
 
+    struct ExportInfo
+    {
+        uint32_t    width;
+        uint32_t    height;
+        uint32_t    rowPitch;           // Row pitch in bytes (stride per row)
+        uint32_t    numSourceChannels;  // Number of channels per pixel in the source data (e.g., 4 for RGBA)
+        std::string name;               // see name_map in fsrapirendermodule.cpp
+        std::string filename;           // Output EXR filename
+
+        // First 2 bits belong to MV mode. Others reserved for future use.
+        enum class BitUnpackMode : uint32_t {
+            // As it, float as FP32, uint32_t as FP16, etc.
+            Normal = 0,
+
+            // RGBA = { 0.5 + fMV * displaySize * 0.1， 0.5， 0.5 }
+            MV_Remap = 1 << 0,
+            // Unpack X&Y values from lower 16 bits;
+            Unpack_Lower16 = 1 << 1,
+            MV_Uint32 = MV_Remap | Unpack_Lower16,
+
+            // Directly print (instead of export to EXR) 
+            LogSCD = 1 << 2, // SCD has 3 values.
+            LogDF  = 1 << 3, // Distortion Field has 2 values packed in RG8_UNORM.
+
+        }           unpackMode = BitUnpackMode::Normal;
+    };
+
+    inline bool isRemap(ExportInfo::BitUnpackMode mode) {
+        return (static_cast<uint32_t>(mode) & static_cast<uint32_t>(ExportInfo::BitUnpackMode::MV_Remap)) != 0;
+    }
+
+    inline bool isUnpack(ExportInfo::BitUnpackMode mode) {
+        return (static_cast<uint32_t>(mode) & static_cast<uint32_t>(ExportInfo::BitUnpackMode::Unpack_Lower16)) != 0;
+    }
+
+    constexpr uint32_t NumChannelsFromFormat(ResourceFormat format) {
+        switch (format)
+        {
+        case ResourceFormat::R8_UNORM:
+        case ResourceFormat::R16_FLOAT:
+        case ResourceFormat::R32_FLOAT:
+        case ResourceFormat::R32_UINT:
+            return 1;
+        case ResourceFormat::RG8_UNORM:
+        case ResourceFormat::RG16_FLOAT:
+        case ResourceFormat::RG16_SINT:
+        case ResourceFormat::RG32_FLOAT:
+            return 2;
+        case ResourceFormat::RGBA8_UNORM:
+        case ResourceFormat::RGBA16_FLOAT:
+        case ResourceFormat::RGBA32_FLOAT:
+            return 4;
+        default:
+            CauldronError(false, "Unsupported format.");
+        }
+    }
+
+    
+    template <typename T>
+    uint16_t convertToFP16(T value, uint32_t scale, ExportInfo::BitUnpackMode mode);
+
+    bool DispatchTemplateExport(ResourceFormat format, const void* data, const ExportInfo& info);
+
+    template <typename T>
+    bool SaveDataWithFormatToEXR(const void* data, const ExportInfo& info);
+
     /**
      * @class TextureDataBlock
      *

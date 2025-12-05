@@ -26,6 +26,8 @@
 
 // Include the interface for the backend of the Frameinterpolation API.
 #include <FidelityFX/host/ffx_interface.h>
+#include <string>
+#include <unordered_map>
 
 /// FidelityFX Frameinterpolation major version.
 ///
@@ -279,6 +281,9 @@ typedef struct FfxFrameInterpolationDispatchDescription {
     FfxResource                         reconstructedPrevDepth;             ///< The reconstructed depth buffer data
 
     FfxResource                         distortionField;                    ///< A resource containing distortion offset data used when distortion post effects are enabled.
+
+    // Add our debug UAV check
+    std::unordered_map<std::wstring, FfxResource> DebugSRV;
 } FfxFrameInterpolationDispatchDescription;
 
 FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext* context, const FfxFrameInterpolationDispatchDescription* params);

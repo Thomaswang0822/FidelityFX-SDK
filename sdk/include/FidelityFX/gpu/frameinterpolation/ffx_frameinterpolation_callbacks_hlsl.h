@@ -123,6 +123,7 @@
         return fDeviceToViewDepth;
     }
 
+    // This is displaySize / (8, 8)
     FfxInt32x2 GetOpticalFlowSize()
     {
         FfxInt32x2 iOpticalFlowSize = (1.0f / opticalFlowScale) / FfxFloat32x2(opticalFlowBlockSize.xx);
@@ -135,6 +136,7 @@
         return GetOpticalFlowSize() * 1;
     }
 
+    // { 1 / displayWidth, 1 / displayHeight }
     FfxFloat32x2 GetOpticalFlowScale()
     {
         return opticalFlowScale;
@@ -293,6 +295,11 @@ SamplerState s_LinearClamp : register(s0);
     {
         return r_dilated_motion_vectors[iPxPos].xy;
     }
+
+    FfxFloat32x2 SampleDilatedMotionVector(FFX_PARAMETER_IN FfxFloat32x2 fUv)
+    {
+        return r_dilated_motion_vectors.SampleLevel(s_LinearClamp, fUv, 0);
+    }
 #endif
 
 #ifdef FFX_FRAMEINTERPOLATION_BIND_SRV_DILATED_DEPTH
@@ -301,6 +308,11 @@ SamplerState s_LinearClamp : register(s0);
     FfxFloat32 LoadDilatedDepth(FFX_PARAMETER_IN FfxInt32x2 iPxPos)
     {
         return r_dilated_depth[iPxPos].x;
+    }
+
+    FfxFloat32 SampleDilatedDepth(FFX_PARAMETER_IN FfxFloat32x2 fUv)
+    {
+        return r_dilated_depth.SampleLevel(s_LinearClamp, fUv, 0);
     }
 #endif
 
@@ -311,6 +323,11 @@ SamplerState s_LinearClamp : register(s0);
     {
         return asfloat(r_reconstructed_depth_previous_frame[iPxInput]);
     }
+
+    FfxFloat32 SampleReconstructedDepthPreviousFrame(FFX_PARAMETER_IN FfxInt32x2 iPxInput)
+    {
+        return asfloat(r_reconstructed_depth_previous_frame.Load(FfxInt32x3(iPxInput, 0)));
+    }
 #endif
 
 #ifdef FFX_FRAMEINTERPOLATION_BIND_SRV_RECONSTRUCTED_DEPTH_INTERPOLATED_FRAME
@@ -319,6 +336,11 @@ SamplerState s_LinearClamp : register(s0);
     FfxFloat32 LoadEstimatedInterpolationFrameDepth(FFX_PARAMETER_IN FfxInt32x2 iPxInput)
     {
         return asfloat(r_reconstructed_depth_interpolated_frame[iPxInput]);
+    }
+
+    FfxFloat32 SampleEstimatedInterpolationFrameDepth(FFX_PARAMETER_IN FfxInt32x2 iPxInput)
+    {
+        return asfloat(r_reconstructed_depth_interpolated_frame.Load(FfxInt32x3(iPxInput, 0)));
     }
 #endif
 
@@ -371,6 +393,11 @@ SamplerState s_LinearClamp : register(s0);
         {
             return r_optical_flow[iPxPos] * GetOpticalFlowScale();
         }
+
+        FfxFloat32x2 SampleOpticalFlow(FFX_PARAMETER_IN FfxInt32x2 iPxInput)
+        {
+            return r_optical_flow.Load(FfxInt32x3(iPxInput, 0)) * GetOpticalFlowScale();
+        }
     #endif
 #endif
 
@@ -390,6 +417,11 @@ SamplerState s_LinearClamp : register(s0);
     {
         return r_optical_flow_confidence[iPxPos].y;
     }
+
+    FfxFloat32 SampleOpticalFlowConfidence(FFX_PARAMETER_IN FfxInt32x2 iPxInput)
+    {
+        return asfloat(r_optical_flow_confidence.Load(FfxInt32x3(iPxInput, 0)).y);
+    }
 #endif
 
 #ifdef FFX_FRAMEINTERPOLATION_BIND_SRV_OPTICAL_FLOW_GLOBAL_MOTION
@@ -399,6 +431,11 @@ SamplerState s_LinearClamp : register(s0);
     {
         return r_optical_flow_global_motion[iPxPos];
     }
+
+    FfxFloat32 SampleOpticalFlowGlobalMotion(FFX_PARAMETER_IN FfxInt32x2 iPxInput)
+    {
+        return asfloat(r_optical_flow_global_motion.Load(FfxInt32x3(iPxInput, 0)));
+    }
 #endif
 
 #ifdef FFX_FRAMEINTERPOLATION_BIND_SRV_OPTICAL_FLOW_SCENE_CHANGE_DETECTION
@@ -407,6 +444,11 @@ SamplerState s_LinearClamp : register(s0);
     FfxUInt32 LoadOpticalFlowSceneChangeDetection(FFX_PARAMETER_IN FfxInt32x2 iPxPos)
     {
         return r_optical_flow_scd[iPxPos];
+    }
+
+    FfxFloat32 SampleOpticalFlowSceneChangeDetection(FFX_PARAMETER_IN FfxInt32x2 iPxInput)
+    {
+        return asfloat(r_optical_flow_scd.Load(FfxInt32x3(iPxInput, 0)));
     }
 
     FfxBoolean HasSceneChanged()
@@ -457,6 +499,11 @@ SamplerState s_LinearClamp : register(s0);
     {
         return r_inpainting_pyramid.mips[mipLevel][iPxInput];
     }
+
+    FfxFloat32x4 SampleInpaintingPyramid(FFX_PARAMETER_IN FfxInt32 mipLevel, FFX_PARAMETER_IN FfxFloat32x2 fUv)
+    {
+        return r_inpainting_pyramid.SampleLevel(s_LinearClamp, fUv, mipLevel);
+    }
 #endif
 
 #ifdef FFX_FRAMEINTERPOLATION_BIND_SRV_PRESENT_BACKBUFFER
@@ -487,27 +534,45 @@ SamplerState s_LinearClamp : register(s0);
 #endif
 
 #if defined(FFX_FRAMEINTERPOLATION_BIND_SRV_INPUT_DEPTH)
-Texture2D<FfxFloat32> r_input_depth : FFX_DECLARE_SRV(FFX_FRAMEINTERPOLATION_BIND_SRV_INPUT_DEPTH);
-FfxFloat32 LoadInputDepth(FfxInt32x2 iPxPos)
-{
-    return r_input_depth[iPxPos];
-}
+    Texture2D<FfxFloat32> r_input_depth : FFX_DECLARE_SRV(FFX_FRAMEINTERPOLATION_BIND_SRV_INPUT_DEPTH);
+    FfxFloat32 LoadInputDepth(FfxInt32x2 iPxPos)
+    {
+        return r_input_depth[iPxPos];
+    }
+
+    FfxFloat32 SampleInputDepth(FFX_PARAMETER_IN FfxFloat32x2 fUv)
+    {
+        return r_input_depth.SampleLevel(s_LinearClamp, fUv, 0);
+    }
 #endif
 
 #if defined(FFX_FRAMEINTERPOLATION_BIND_SRV_INPUT_MOTION_VECTORS)
-Texture2D<FfxFloat32x4> r_input_motion_vectors : FFX_DECLARE_SRV(FFX_FRAMEINTERPOLATION_BIND_SRV_INPUT_MOTION_VECTORS);
-FfxFloat32x2 LoadInputMotionVector(FfxInt32x2 iPxDilatedMotionVectorPos)
-{
-    FfxFloat32x2 fSrcMotionVector = r_input_motion_vectors[iPxDilatedMotionVectorPos].xy;
+    Texture2D<FfxFloat32x4> r_input_motion_vectors : FFX_DECLARE_SRV(FFX_FRAMEINTERPOLATION_BIND_SRV_INPUT_MOTION_VECTORS);
+    FfxFloat32x2 LoadInputMotionVector(FfxInt32x2 iPxDilatedMotionVectorPos)
+    {
+        FfxFloat32x2 fSrcMotionVector = r_input_motion_vectors[iPxDilatedMotionVectorPos].xy;
 
-    FfxFloat32x2 fUvMotionVector = fSrcMotionVector * MotionVectorScale();
+        FfxFloat32x2 fUvMotionVector = fSrcMotionVector * MotionVectorScale();
 
-#if FFX_FRAMEINTERPOLATION_OPTION_JITTERED_MOTION_VECTORS
-    fUvMotionVector -= MotionVectorJitterCancellation();
-#endif
+    #if FFX_FRAMEINTERPOLATION_OPTION_JITTERED_MOTION_VECTORS
+        fUvMotionVector -= MotionVectorJitterCancellation();
+    #endif
 
-    return fUvMotionVector;
-}
+        return fUvMotionVector;
+    }
+
+    FfxFloat32x2 SampleInputMotionVector(FFX_PARAMETER_IN FfxFloat32x2 fUv)
+    {
+        FfxFloat32x2 fSrcMotionVector = r_input_motion_vectors.SampleLevel(s_LinearClamp, fUv, 0).xy;
+
+        FfxFloat32x2 fUvMotionVector = fSrcMotionVector * MotionVectorScale();
+
+    #if FFX_FRAMEINTERPOLATION_OPTION_JITTERED_MOTION_VECTORS
+        fUvMotionVector -= MotionVectorJitterCancellation();
+    #endif
+
+        return fUvMotionVector;
+    }
 #endif
 
 #if defined(FFX_FRAMEINTERPOLATION_BIND_SRV_DISTORTION_FIELD)

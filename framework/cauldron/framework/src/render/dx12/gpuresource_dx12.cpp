@@ -327,6 +327,13 @@ namespace cauldron
             pClearValue = &clearValue;
         }
 
+        if (m_Name == L"CurrFrameHack_0")
+        {
+            auto fsrapiRM = GetFramework()->GetRenderModule("FSRApiRenderModule");
+            if (false && fsrapiRM && fsrapiRM->ModuleEnabled())
+                fsrapiRM->DebugCheck("AfterMA_HDR");
+        }
+
         CauldronThrowOnFail(GetDevice()->GetImpl()->GetD3D12MemoryAllocator()->CreateResource(&allocationDesc, &m_ResourceDesc, GetDXResourceState(initialState),
             pClearValue, &m_pAllocation, IID_PPV_ARGS(&m_pResource)));
 

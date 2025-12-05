@@ -344,6 +344,7 @@ namespace cauldron
                     //// move camera top-left such that objects moves down-right
                     //x += -displacementIncr;
                     //y += displacementIncr;
+                    //z += displacementIncr;
 
                     Vec4 movement = Vec4(x, y, z, 0.f);
 

@@ -45,9 +45,76 @@ FfxFloat32x2 getTransformedUv(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewp
     return fUv;
 }
 
+FfxUInt32x2 getOpticalFlowPxPos(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
+{
+    // Transform from debug viewport pixel coordinate to original texture pixel coordinate
+    FfxFloat32x2 fUv           = (FfxFloat32x2(iPxPos - vp.offset) + 0.5f) / vp.size;
+    FfxUInt32x2  originalPxPos = FfxUInt32x2(fUv * GetOpticalFlowSize());
+
+    return originalPxPos;
+}
+
 FfxFloat32x4 getMotionVectorColor(FfxFloat32x2 fMotionVector)
 {
     return FfxFloat32x4(0.5f + fMotionVector * DisplaySize() * 0.1f, 0.5f, 1.0f);
+}
+
+void drawInputMotionVector(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
+{
+    FfxFloat32x2 fUv = getTransformedUv(iPxPos, vp);
+
+    FfxFloat32x2 fCurrentMotionVector = SampleInputMotionVector(fUv);
+
+    StoreFrameinterpolationOutput(iPxPos, getMotionVectorColor(fCurrentMotionVector));
+}
+
+void drawInputDepth(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
+{
+    FfxFloat32x2 fUv = getTransformedUv(iPxPos, vp);
+
+    // Let depth be blue
+    FfxFloat32x4 fCurrentDepth = FfxFloat32x4(0.0f, 0.0f, SampleInputDepth(fUv), 1.0f);
+
+    StoreFrameinterpolationOutput(iPxPos, fCurrentDepth);
+}
+
+void drawDilatedMotionVector(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
+{
+    FfxFloat32x2 fUv = getTransformedUv(iPxPos, vp);
+
+    FfxFloat32x2 fCurrentMotionVector = SampleDilatedMotionVector(fUv);
+
+    StoreFrameinterpolationOutput(iPxPos, getMotionVectorColor(fCurrentMotionVector));
+}
+
+void drawDilatedDepth(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
+{
+    FfxFloat32x2 fUv = getTransformedUv(iPxPos, vp);
+
+    // Let depth be blue
+    FfxFloat32x4 fCurrentDepth = FfxFloat32x4(0.0f, 0.0f, SampleDilatedDepth(fUv), 1.0f);
+
+    StoreFrameinterpolationOutput(iPxPos, fCurrentDepth);
+}
+
+void drawRecDepthPrev(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
+{
+    FfxFloat32x2 fUv = getTransformedUv(iPxPos, vp);
+
+    // Let depth be blue
+    FfxFloat32x4 fCurrentDepth = FfxFloat32x4(0.0f, 0.0f, SampleReconstructedDepthPreviousFrame(fUv), 1.0f);
+
+    StoreFrameinterpolationOutput(iPxPos, fCurrentDepth);
+}
+
+void drawRecDepthInterp(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
+{
+    FfxFloat32x2 fUv = getTransformedUv(iPxPos, vp);
+
+    // Let depth be blue
+    FfxFloat32x4 fCurrentDepth = FfxFloat32x4(0.0f, 0.0f, SampleEstimatedInterpolationFrameDepth(fUv), 1.0f);
+
+    StoreFrameinterpolationOutput(iPxPos, fCurrentDepth);
 }
 
 FfxFloat32x4 getUnusedIndicationColor(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
@@ -87,6 +154,30 @@ void drawOpticalFlowMotionVectorField(FfxInt32x2 iPxPos, FfxFrameInterpolationDe
     SampleOpticalFlowMotionVectorField(fUv, ofMv);
 
     StoreFrameinterpolationOutput(iPxPos, getMotionVectorColor(ofMv.fMotionVector));
+}
+
+void drawOpticalFlowVec(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
+{
+    FfxFloat32x2 iOfPos = getOpticalFlowPxPos(iPxPos, vp);
+
+    FfxFloat32x2 fCurrentOFlow = SampleOpticalFlow(iOfPos);
+
+    StoreFrameinterpolationOutput(iPxPos, getMotionVectorColor(fCurrentOFlow));
+}
+
+// Store Confidence, GlobalMotion, and SceneChangeDetection of OFlow, are being float, to RGB
+void drawOpticalFlowMisc(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
+{
+    FfxFloat32x2 iOfPos = getOpticalFlowPxPos(iPxPos, vp);
+
+    FfxFloat32x4 fCurrentOFlow = FfxFloat32x4(
+        SampleOpticalFlowConfidence(iOfPos), 
+        SampleOpticalFlowGlobalMotion(iOfPos), 
+        SampleOpticalFlowSceneChangeDetection(iOfPos), 
+        1.0f
+    );
+
+    StoreFrameinterpolationOutput(iPxPos, fCurrentOFlow);
 }
 
 void drawDisocclusionMask(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
@@ -132,6 +223,15 @@ void drawCurrentInterpolationSource(FfxInt32x2 iPxPos, FfxFrameInterpolationDebu
     StoreFrameinterpolationOutput(iPxPos, fCurrentBackBuffer);
 }
 
+void drawPreviousInterpolationSource(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
+{
+    FfxFloat32x2 fUv = getTransformedUv(iPxPos, vp);
+
+     FfxFloat32x4 fCurrentBackBuffer = FfxFloat32x4(SamplePreviousBackbuffer(fUv), 1.0f);
+
+    StoreFrameinterpolationOutput(iPxPos, fCurrentBackBuffer);
+}
+
 FfxBoolean pointIsInsideViewport(FfxInt32x2 iPxPos, FfxFrameInterpolationDebugViewport vp)
 {
     FfxInt32x2 extent = vp.offset + vp.size;
@@ -166,7 +266,17 @@ void computeDebugView(FfxInt32x2 iPxPos)
     // bottom row
     DRAW_VIEWPORT(drawDisocclusionMask,                     iPxPos, vp[2][0]);
     DRAW_VIEWPORT(drawCurrentInterpolationSource,           iPxPos, vp[2][1]);
-    DRAW_VIEWPORT(drawPresentBackbuffer,                    iPxPos, vp[2][2]);
+    DRAW_VIEWPORT(drawPreviousInterpolationSource,          iPxPos, vp[2][2]);
+
+    //// top row
+    //DRAW_VIEWPORT(drawInputMotionVector, iPxPos, vp[0][0]);
+    //DRAW_VIEWPORT(drawInputDepth, iPxPos, vp[0][1]);
+    //DRAW_VIEWPORT(drawRecDepthPrev, iPxPos, vp[0][2]);
+
+    //// bottom row
+    //DRAW_VIEWPORT(drawDilatedMotionVector, iPxPos, vp[2][0]);
+    //DRAW_VIEWPORT(drawDilatedDepth, iPxPos, vp[2][1]);
+    //DRAW_VIEWPORT(drawRecDepthInterp, iPxPos, vp[2][2]);
 }
 
 #endif  // FFX_FRAMEINTERPOLATION_DEBUG_VIEW_H

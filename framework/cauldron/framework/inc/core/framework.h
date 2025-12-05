@@ -755,12 +755,8 @@ namespace cauldron
         std::wstring            m_ConfigFileName;
         std::wstring            m_CmdLine;
         std::wstring            m_CPUName = L"Not Set";
-        /*
         ResolutionInfo          m_ResolutionInfo            = {1920, 1080, 1920, 1080, 1920, 1080};
         ResolutionInfo          m_BenchmarkResolutionInfo   = {1920, 1080, 1920, 1080, 1920, 1080};
-        */
-        ResolutionInfo          m_ResolutionInfo            = {3840, 2160, 3840, 2160, 3840, 2160};
-        ResolutionInfo          m_BenchmarkResolutionInfo   = {3840, 2160, 3840, 2160, 3840, 2160};
         UpscalerState           m_UpscalingState = UpscalerState::None;
         ResolutionUpdateFunc    m_ResolutionUpdaterFn = nullptr;
         bool                    m_UpscalerEnabled = false;

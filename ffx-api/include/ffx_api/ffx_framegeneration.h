@@ -24,6 +24,8 @@
 
 #include "ffx_api.h"
 #include "ffx_api_types.h"
+#include <unordered_map>
+#include <string>
 
 #define FFX_API_EFFECT_ID_FRAMEGENERATION 0x00020000u
 
@@ -94,6 +96,9 @@ typedef struct ffxDispatchDescFrameGeneration
     float                 minMaxLuminance[2];         ///< Min and max luminance values, used when converting HDR colors to linear RGB.
     struct FfxApiRect2D   generationRect;             ///< The area of the backbuffer that should be used for generation in case only a part of the screen is used e.g. due to movie bars.
     uint64_t              frameID;                    ///< Identifier used to select internal resources when async support is enabled. Must increment by exactly one (1) for each frame. Any non-exactly-one difference will reset the frame generation logic.
+
+    // Add our debug UAV check
+    std::unordered_map<std::wstring, FfxApiResource> DebugApiResources;
 } ffxDispatchDescFrameGeneration;
 
 typedef ffxReturnCode_t(*FfxApiPresentCallbackFunc)(ffxCallbackDescFrameGenerationPresent* params, void* pUserCtx);
@@ -135,7 +140,7 @@ struct ffxDispatchDescFrameGenerationPrepare
     float                 cameraFovAngleVertical;  ///< The camera angle field of view in the vertical direction (expressed in radians).
     float                 viewSpaceToMetersFactor; ///< The scale factor to convert view space units to meters
     struct FfxApiResource depth;                   ///< The depth buffer data
-    struct FfxApiResource motionVectors;           ///< The motion vector data    
+    struct FfxApiResource motionVectors;           ///< The motion vector data
 };
 
 #define FFX_API_CONFIGURE_DESC_TYPE_FRAMEGENERATION_KEYVALUE 0x00020006u

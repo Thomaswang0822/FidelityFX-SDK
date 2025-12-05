@@ -92,6 +92,16 @@ namespace cauldron
         virtual void OnPreFrame() {}
 
         /**
+         * @brief   Useful debug that can be called ANYWHERE,
+         * because Framework* GetFramework() is global, and from Framework
+         * we can call this on any RM, 
+         * e.g.  GetFramework()->GetRenderModule("FSRApiRenderModule")->DebugCheck("BeforeResize");
+         * 
+         * This helps us to Debug the strange all-black issue when 1k -> 4K
+         */
+        virtual bool DebugCheck(std::string marker) { return true; }
+
+        /**
          * @brief   Returns true if the render module is ready for execution.
          */
         bool ModuleReady() const { return m_ModuleReady; }

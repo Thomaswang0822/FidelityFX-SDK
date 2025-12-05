@@ -82,6 +82,7 @@ namespace cauldron
             if (SUCCEEDED(hr) && (FormatSupport.Support1 & D3D12_FORMAT_SUPPORT1_DISPLAY) != 0)
             {
                 m_SwapChainFormat = pConfig->SwapChainFormat;
+                m_CurrentDisplayMode = GetDisplayMode(m_SwapChainFormat);
             }
             else
             {

@@ -82,6 +82,24 @@ namespace cauldron
         }
     }
 
+    DisplayMode SwapChain::GetDisplayMode(ResourceFormat format)
+    {
+        // default to LDR
+        DisplayMode mode = DisplayMode::DISPLAYMODE_LDR;
+        switch (format)
+        {
+        case ResourceFormat::RGB10A2_UNORM:
+            mode = DisplayMode::DISPLAYMODE_HDR10_2084;
+            break;
+        case ResourceFormat::RGBA16_FLOAT:
+            mode = DisplayMode::DISPLAYMODE_HDR10_SCRGB;
+            break;
+        default:
+            break;
+        }
+        return mode;
+    }
+
     DisplayMode SwapChain::CheckAndGetDisplayModeRequested(DisplayMode DispMode)
     {
         for (const auto& it : m_SupportedDisplayModes)

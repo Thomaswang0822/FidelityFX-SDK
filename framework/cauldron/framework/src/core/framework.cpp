@@ -1188,29 +1188,6 @@ namespace cauldron
         m_Config.HackOptions.outputMaxCount = std::min(
             hackOptions.value<size_t>("OutputMaxCount", m_Config.HackOptions.frameCount), 
             m_Config.HackOptions.frameCount);
-
-        // Finally we create nTargets of each type of Render targets.
-        const std::vector<std::wstring>   renderTargetNames = {L"CurrFrameHack", L"MvHack", L"DepthHack"};
-        const std::vector<ResourceFormat> formats           = {ResourceFormat::RGBA8_UNORM, ResourceFormat::RG16_FLOAT, ResourceFormat::R32_FLOAT};
-        for (size_t type = 0; type < renderTargetNames.size(); type++)
-        {
-            for (size_t i = 0; i < nTargets; ++i)
-            {
-                std::wstring              fullname = renderTargetNames[type] + L"_" + std::to_wstring(i);
-                RenderResourceInformation info;
-                auto                      check = m_Config.CurrentDisplayMode;
-                info.Format                     = formats[type];
-                info.AllowUAV                   = false;
-                info.RenderResolution           = false;
-                auto emplaceResults             = m_Config.RenderResources.emplace(std::make_pair(fullname, info));
-                if (!emplaceResults.second)
-                {
-                    CauldronWarning(L"Hacking render target %s has been defined in cauldronconfig.json RenderResources.", fullname);
-                    emplaceResults.first->second = info;
-                }
-            }
-        }  // end of hacking render targets creation
-
     }
 
     void Framework::InitConfig()
@@ -1266,7 +1243,7 @@ namespace cauldron
 
         // resize all resolution-dependent resources
         m_pDynamicResourcePool->OnResolutionChanged(m_ResolutionInfo);
-
+        
         // Notify that the swapchain has been recreated and other resources have been resized
         {
             std::lock_guard<std::mutex> lock(m_ResourceResizeMutex);
@@ -2346,6 +2323,43 @@ namespace cauldron
             const Texture* pRenderTarget = m_pDynamicResourcePool->CreateRenderTexture(&uiTextureDesc, resizeFunc);
             CauldronAssert(ASSERT_CRITICAL, pRenderTarget, L"Could not create render target %ls", texName.c_str());
         }
+
+        /// Finally we create nTargets of each type of Render targets.
+        /// Note that we DO NOT add them to hashmap RenderResources and let the while loop create them
+        /// because we should make them not resizable.
+        const auto                        nTargets          = m_Config.HackOptions.frameCount;
+        const std::vector<std::wstring>   renderTargetNames = {L"CurrFrameHack", L"MvHack", L"DepthHack"};
+        const std::vector<ResourceFormat> formats           = {m_Config.SwapChainFormat, ResourceFormat::RG16_FLOAT, ResourceFormat::D32_FLOAT};
+        // Will reuse it
+        TextureDesc desc;
+        desc.Width            = m_ResolutionInfo.DisplayWidth;
+        desc.Height           = m_ResolutionInfo.DisplayHeight;
+        desc.Dimension        = TextureDimension::Texture2D;
+        desc.DepthOrArraySize = 1;
+        desc.MipLevels        = 1;
+
+        for (size_t type = 0; type < renderTargetNames.size(); type++)
+        {
+            desc.Format = formats[type];
+            if (IsDepth(desc.Format))
+                desc.Flags = ResourceFlags::AllowDepthStencil;
+            else
+                desc.Flags = ResourceFlags::AllowRenderTarget;
+
+            bool allowUAV = (type == 0);  // only the hack color allows UAV
+            if (allowUAV)
+                desc.Flags = static_cast<ResourceFlags>(desc.Flags | ResourceFlags::AllowUnorderedAccess);
+
+            for (size_t i = 0; i < nTargets; ++i)
+            {
+                std::wstring fullname = renderTargetNames[type] + L"_" + std::to_wstring(i);
+                desc.Name = fullname;
+
+                const Texture* pHackTarget = m_pDynamicResourcePool->CreateRenderTexture(&desc, nullptr);
+                CauldronAssert(ASSERT_ERROR, pHackTarget, L"Could not create Hack target %ls", fullname);
+            }
+        }  // end of hacking render targets creation
+
         
         return 0;
     }
@@ -2369,7 +2383,7 @@ namespace cauldron
             if (StringToWString(name) == pRM->GetName())
                 return pRM;
         }
-        CauldronCritical(L"Could not find render module %ls", StringToWString(name).c_str());
+        //CauldronCritical(L"Could not find render module %ls", StringToWString(name).c_str());
         return nullptr;
     }
 
@@ -2497,7 +2511,6 @@ namespace cauldron
         // i.e. things we don't want to do before DoSampleInit because it might take long to happen
         pFramework->PreRun();
 
-        auto resInfo = pFramework->GetResolutionInfo();
         // Run the framework (won't return until we are done
         int32_t result = pFramework->Run();
 

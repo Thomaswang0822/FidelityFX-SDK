@@ -41,6 +41,184 @@ using namespace std::experimental;
 
 namespace cauldron
 {
+    template <typename T>
+    uint16_t convertToFP16(T value, uint32_t scale, ExportInfo::BitUnpackMode mode)
+    {
+        // Whether to remap MV values and whether to unpack from lower 16 bits
+        const bool shouldRemap  = isRemap(mode);
+        const bool shouldUnpack = isUnpack(mode);
+
+        if constexpr (std::is_same_v<T, uint16_t>) {
+            CauldronAssert(ASSERT_CRITICAL, !shouldUnpack, L"Unpack_Lower16 mode is not applicable for uint16_t data.");
+            if (shouldRemap) {
+            // Convert from FP16 to FP32 for remapping
+                tinyexr::FP16 fp16;
+                fp16.u = value;
+                tinyexr::FP32 fp32 = half_to_float(fp16);
+                // Remap
+                fp32.f = 0.5f + fp32.f * 0.1f * static_cast<float>(scale);
+                // Convert back to FP16
+                return float_to_half_full(fp32).u;
+            }
+            else
+                return value;
+        }
+        else if constexpr (std::is_same_v<T, float>) {
+            tinyexr::FP32 fp32;
+            if (shouldUnpack)
+            {
+                // Then we must know the bit pattern
+                uint32_t intValue = *reinterpret_cast<uint32_t*>(&value);
+                tinyexr::FP16 fp16;
+                fp16.u = static_cast<uint16_t>(intValue & 0xFFFF);
+                fp32 = half_to_float(fp16);
+            }
+            fp32.f = shouldRemap ? (0.5f + fp32.f * 0.1f * scale) : value;
+            return float_to_half_full(fp32).u;
+        }
+        else if constexpr (std::is_same_v<T, uint8_t>)
+        {
+            CauldronAssert(ASSERT_CRITICAL, !shouldUnpack && !shouldRemap, L"uint8_t data must be in normal mode.");
+            // Convert from 0-255 UNORM to FP16
+            float         fValue = static_cast<float>(value) / 255.0f;
+            tinyexr::FP32 f32;
+            f32.f = fValue;
+            return float_to_half_full(f32).u;
+        }
+        else
+        {
+            CauldronError(L"Unsupported type for EXR export");
+            return 0;
+        }
+    }
+    /// Since <T> appears in the function arg, we don't need to specialize the function itself.
+
+    template <typename T>
+    bool SaveDataWithFormatToEXR(const void* data, const ExportInfo& info)
+    {
+        EXRHeader header;
+        InitEXRHeader(&header);
+        EXRImage exrImage;
+        InitEXRImage(&exrImage);
+
+        /// We always export to a generic RGB image even when we only have float2 (MV) or float (Depth) to store.
+        /// And to enable image diff, we should be consistent with our inputs, which has BGR channel order. 
+        //const char* channelNames[3]  = {"X", "Y", "Z"};
+        const char* channelNames[3]  = {"B", "G", "R"};
+        header.num_channels          = 3;
+        header.channels              = new EXRChannelInfo[header.num_channels];
+        header.pixel_types           = new int[header.num_channels];
+        header.requested_pixel_types = new int[header.num_channels];
+
+        // Allocate planar arrays for 3 channels
+        std::vector<std::vector<uint16_t>> channelData(header.num_channels);
+        // Prepare channel pointers for EXR
+        std::vector<unsigned char*> imagePtrs(header.num_channels);
+
+        for (int i = 0; i < header.num_channels; i++)
+        {
+            strncpy(header.channels[i].name, channelNames[i], 255);
+
+            header.pixel_types[i]           = TINYEXR_PIXELTYPE_HALF;
+            header.requested_pixel_types[i] = TINYEXR_PIXELTYPE_HALF;
+
+            channelData[i].resize(info.width * info.height);
+            imagePtrs[i] = reinterpret_cast<unsigned char*>(channelData[i].data());
+        }
+        header.compression_type = TINYEXR_COMPRESSIONTYPE_NONE;
+
+        // Configure EXR image
+        exrImage.num_channels = header.num_channels;
+        exrImage.width        = info.width;
+        exrImage.height       = info.height;
+        exrImage.images       = imagePtrs.data();
+
+        // Calculate row pitch in terms of uint16_t elements
+        const size_t rowPitchElements = info.rowPitch / sizeof(T);
+        const T*     typeTData        = reinterpret_cast<const T*>(data);
+
+        const uint16_t FP16_Point5 = []() {
+            tinyexr::FP32 fp32;
+            fp32.f = 0.5f;
+            return float_to_half_full(fp32).u;
+        }();
+
+        // We may get RGBA data, but only save RGB channels
+        uint32_t numActiveChannels = std::min(info.numSourceChannels, 3u);
+        // Deinterleave pixel data into planar format
+        for (uint32_t y = 0; y < info.height; y++) {
+            const T* srcRow = typeTData + y * rowPitchElements;
+
+            for (uint32_t x = 0; x < info.width; x++) {
+                const uint32_t dstIdx  = y * info.width + x;
+                const uint32_t srcIdx  = x * info.numSourceChannels;
+
+                // convert X and Y according to RGBA = { 0.5 + fMV * displaySize * 0.1， 0.5， 0.5 }
+                if (numActiveChannels > 0)
+                    channelData[2][dstIdx] = convertToFP16<T>(srcRow[srcIdx + 0], info.width, info.unpackMode);
+                if (numActiveChannels > 1)
+                    channelData[1][dstIdx] = convertToFP16<T>(srcRow[srcIdx + 1], info.height, info.unpackMode);
+                // Channel B/Z: Set Z to 0.5 in FP16 if remap
+                if (numActiveChannels > 2)
+                    channelData[0][dstIdx] = isRemap(info.unpackMode) ? FP16_Point5 : 
+                        convertToFP16<T>(srcRow[srcIdx + 2], 0 /* shouldn't be used */, info.unpackMode);
+                // We don't have A/W channel
+            }
+        }
+
+        // Save EXR file
+        const char* err     = nullptr;
+        int         ret     = SaveEXRImageToFile(&exrImage, &header, info.filename.c_str(), &err);
+        bool        success = (ret == TINYEXR_SUCCESS);
+
+        // Cleanup
+        delete[] header.channels;
+        delete[] header.pixel_types;
+        delete[] header.requested_pixel_types;
+
+        if (!success && err)
+        {
+            // Handle error (log or throw)
+            FreeEXRErrorMessage(err);
+            return false;
+        }
+
+        return success;
+    }
+
+    /// Explicitly instantiate what I support
+    template bool SaveDataWithFormatToEXR<uint8_t>(const void*, const ExportInfo&);
+    template bool SaveDataWithFormatToEXR<uint16_t>(const void*, const ExportInfo&);
+    template bool SaveDataWithFormatToEXR<float>(const void*, const ExportInfo&);
+
+    bool DispatchTemplateExport(ResourceFormat format, const void* data, const ExportInfo& info)
+    {
+        // Check format and call appropriate template instantiation
+        switch (format)
+        {
+        case ResourceFormat::R8_UNORM:
+        case ResourceFormat::RG8_UNORM:
+        case ResourceFormat::RGBA8_UNORM:
+            return SaveDataWithFormatToEXR<uint8_t>(data, info);
+            break;
+        case ResourceFormat::R16_FLOAT:
+        case ResourceFormat::RG16_FLOAT:
+        case ResourceFormat::RG16_SINT:
+        case ResourceFormat::RGBA16_FLOAT:
+            return SaveDataWithFormatToEXR<uint16_t>(data, info);
+            break;
+        case ResourceFormat::R32_UINT:
+        case ResourceFormat::R32_FLOAT:
+        case ResourceFormat::RG32_FLOAT:
+        case ResourceFormat::RGBA32_FLOAT:
+            return SaveDataWithFormatToEXR<float>(data, info);
+            break;
+        default:
+            throw std::runtime_error("Unsupported format for FSR3 buffer export");
+        }
+        return false;
+    }
+
     void TextureLoader::LoadAsync(void* pLoadParams)
     {
         // Validate there is at least one param instance
@@ -442,6 +620,7 @@ namespace cauldron
         // first malloc byte array depending on format and upscale factor
         m_BytesPerPixel     = (m_Format == ResourceFormat::RGBA16_FLOAT) ? 8 : 4;
         char* finalCharData = static_cast<char*>(malloc(pixelCount * m_BytesPerPixel * m_UpscaleRatio * m_UpscaleRatio));
+        std::memset(finalCharData, 0, pixelCount * m_BytesPerPixel * m_UpscaleRatio * m_UpscaleRatio);
         if (! finalCharData)
         {
            CauldronError(L"Failed to allocate memory for EXR texture data.");
@@ -689,9 +868,9 @@ namespace cauldron
                     idxSrc = y * inputWidth + x;
                     idxDst = (y * outputWidth + x) * 2;  // each mv stored as 2 fp16
 
-                    // no interpolation needed
-                    fp16Data[idxDst]     = scaleMV(r[idxSrc], -1.0f);  // mv.X
-                    fp16Data[idxDst + 1] = scaleMV(g[idxSrc], +1.0f);  // mv.Y
+                    // ROOT cause of ghosting finally found: should scale by 0.5
+                    fp16Data[idxDst]     = scaleMV(r[idxSrc], -0.5f);  // mv.X
+                    fp16Data[idxDst + 1] = scaleMV(g[idxSrc], +0.5f);  // mv.Y
                 }
             } // end iterating the image
         }
@@ -718,8 +897,8 @@ namespace cauldron
             free(m_pData);
         m_pData = charData;  // Store as char*
 
-        m_Width     = outputWidth;
-        m_Height    = outputHeight;
+        m_Width     = outputWidth * m_UpscaleRatio;
+        m_Height    = outputHeight * m_UpscaleRatio;
         textureName = textureFile.wstring();
 
         // Fill texture description

@@ -517,6 +517,11 @@ ffxReturnCode_t ffxProvider_FrameGeneration::Dispatch(ffxContext* context, const
                 fiDispatchDesc.distortionField = internal_context->distortionField;
             }
             TRY2(ffxFrameInterpolationDispatch(&internal_context->fiContext, &fiDispatchDesc));
+
+            // DEBUG: now we have debug FfxResource in fiDispatchDesc
+            for (auto& [name, srv] : fiDispatchDesc.DebugSRV) {
+                const_cast<ffxDispatchDescFrameGeneration*>(desc)->DebugApiResources[name] = Convert(srv);
+            }
         }
 
         return FFX_API_RETURN_OK;
@@ -561,7 +566,7 @@ ffxReturnCode_t ffxProvider_FrameGeneration::Dispatch(ffxContext* context, const
         }
 
         TRY2(ffxFrameInterpolationPrepare(&internal_context->fiContext, &dispatchDesc));
-
+        
         return FFX_API_RETURN_OK;
     }
     else

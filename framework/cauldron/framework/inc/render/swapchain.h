@@ -168,6 +168,7 @@ namespace cauldron
 
         // Helper to get formats
         ResourceFormat GetFormat(DisplayMode displayMode);
+        DisplayMode    GetDisplayMode(ResourceFormat format);
 
         virtual void CreateSwapChainRenderTargets() = 0;
         void DestroySwapChainRenderTargets();

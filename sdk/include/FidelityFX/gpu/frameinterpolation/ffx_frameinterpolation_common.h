@@ -52,7 +52,7 @@ FfxFloat32x3 ffxscRGBToLinear(FfxFloat32x3 value, FfxFloat32 minLuminance, FfxFl
 
 FfxFloat32x3 RawRGBToLinear(FfxFloat32x3 fRawRgb)
 {
-    FfxFloat32x3 fLinearRgb;
+    FfxFloat32x3 fLinearRgb = fRawRgb;
 
     switch (BackBufferTransferFunction())
     {
