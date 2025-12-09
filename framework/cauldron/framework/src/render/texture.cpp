@@ -24,9 +24,7 @@
 #include "core/framework.h"
 #include "misc/assert.h"
 
-#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING    // To avoid receiving deprecation error since we are using C++11 only
-#include <experimental/filesystem>
-using namespace std::experimental;
+#include <filesystem>
 
 namespace cauldron
 {

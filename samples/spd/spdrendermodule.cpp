@@ -40,7 +40,6 @@
 #include <limits>
 
 using namespace cauldron;
-using namespace std::experimental;
 
 void SPDRenderModule::Init(const json& initData)
 {
@@ -117,7 +116,7 @@ void SPDRenderModule::Init(const json& initData)
         this->TextureLoadComplete(textures, additionalParams); 
     };
 
-    filesystem::path texturePath = L"..\\media\\Textures\\SPD\\spd_cubemap.dds";
+    std::filesystem::path texturePath = L"..\\media\\Textures\\SPD\\spd_cubemap.dds";
     GetContentManager()->LoadTexture(TextureLoadInfo(texturePath, true, 1.f, 
         ResourceFlags::AllowRenderTarget | ResourceFlags::AllowUnorderedAccess), 
         completionCallback);

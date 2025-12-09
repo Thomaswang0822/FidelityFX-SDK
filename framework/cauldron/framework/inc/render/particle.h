@@ -32,8 +32,7 @@
 #include <array>
 
 #include <cstring>
-#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING    // To avoid receiving deprecation error since we are using C++11 only
-#include <experimental/filesystem>
+#include <filesystem>
 #include <vector>
 
 class GPUParticleRenderModule;
@@ -71,7 +70,7 @@ namespace cauldron
     struct ParticleSpawnerDesc
     {
         std::wstring                        Name = L"";                 ///< The particle spawner's name.
-        std::experimental::filesystem::path AtlasPath = {};             ///< The particle spawner's texture atlas (textures backing all emitters in spawner).
+        std::filesystem::path AtlasPath = {};             ///< The particle spawner's texture atlas (textures backing all emitters in spawner).
         Vec3                                Position = Vec3(0, 0, 0);   ///< The particle spawner's position.
         std::vector<EmitterDesc>            Emitters = {};              ///< The list of <c><i>EmitterDesc</i></c> for all emitters in this spawner.
         bool                                Sort = true;                ///< Whether or not to sort the particles spawned by this particle system.

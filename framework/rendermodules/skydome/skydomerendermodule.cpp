@@ -36,7 +36,6 @@
 #include "render/dynamicresourcepool.h"
 #include "render/device.h"
 
-using namespace std::experimental;
 using namespace cauldron;
 
 constexpr uint32_t g_NumThreadX = 8;
@@ -131,7 +130,7 @@ void SkyDomeRenderModule::InitSkyDome()
         {
             this->TextureLoadComplete(textures, additionalParams);
         };
-        filesystem::path m_pSkyTexturePath = GetConfig()->StartupContent.SkyMap;
+        std::filesystem::path m_pSkyTexturePath = GetConfig()->StartupContent.SkyMap;
         GetContentManager()->LoadTexture(TextureLoadInfo(m_pSkyTexturePath), CompletionCallback);
     }
 

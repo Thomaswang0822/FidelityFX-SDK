@@ -32,8 +32,6 @@
 
 #include "render/device.h"
 
-using namespace std::experimental;
-
 namespace cauldron
 {
     void BoundingBox::Grow(Vec4 point)
@@ -99,9 +97,9 @@ namespace cauldron
                     GetScene()->SetIBLTexture(textures[1], IBLTexture::Irradiance);
                 GetScene()->SetBRDFLutTexture(textures[2]);
             };
-            filesystem::path specPath = GetConfig()->StartupContent.SpecularIBL;
-            filesystem::path diffPath = GetConfig()->StartupContent.DiffuseIBL;
-            filesystem::path brdfPath = L"..\\media\\Textures\\BRDF\\BrdfLut.dds";
+            std::filesystem::path specPath = GetConfig()->StartupContent.SpecularIBL;
+            std::filesystem::path diffPath = GetConfig()->StartupContent.DiffuseIBL;
+            std::filesystem::path brdfPath = L"..\\media\\Textures\\BRDF\\BrdfLut.dds";
             std::vector<TextureLoadInfo> texInfo;
             texInfo.push_back(TextureLoadInfo(specPath));
             texInfo.push_back(TextureLoadInfo(diffPath));

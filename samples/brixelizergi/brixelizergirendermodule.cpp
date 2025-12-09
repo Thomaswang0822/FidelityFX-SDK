@@ -39,7 +39,6 @@
 #include "shaders/surfacerendercommon.h"
 #include "shaders/lightingcommon.h"
 
-using namespace std::experimental;
 using namespace cauldron;
 
 constexpr uint32_t g_NumNoiseTextures = 16;
@@ -314,7 +313,7 @@ void BrixelizerGIRenderModule::Init(const json& initData)
     // Load all noise textures.
     for (int i = 0; i < g_NumNoiseTextures; i++)
     {
-        filesystem::path noiseTexturePath = filesystem::path("../media/Textures/Noise/LDR_RG01_" + std::to_string(i) + ".png");
+        std::filesystem::path noiseTexturePath = std::filesystem::path("../media/Textures/Noise/LDR_RG01_" + std::to_string(i) + ".png");
         GetContentManager()->LoadTexture(TextureLoadInfo(noiseTexturePath), CompletionCallback);
     }
 

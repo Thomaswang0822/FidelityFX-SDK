@@ -41,8 +41,6 @@
 #include <unordered_map>
 #include <vulkan/vulkan_win32.h>
 
-using namespace std::experimental;
-
 namespace cauldron
 {
     struct SwapChainSupportDetails {
@@ -548,7 +546,7 @@ namespace cauldron
         m_BackBufferFences[m_CurrentBackBuffer] = waitValue;
     }
 
-    void SwapChainInternal::DumpSwapChainToFile(filesystem::path filePath)
+    void SwapChainInternal::DumpSwapChainToFile(std::filesystem::path filePath)
     {
         const VkImageCreateInfo swapchainImageInfo = m_pRenderTarget->GetCurrentResource()->GetImpl()->GetImageCreateInfo();
 

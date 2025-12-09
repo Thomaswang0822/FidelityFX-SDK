@@ -28,8 +28,7 @@
 #include "misc/helpers.h"
 #include "render/texture.h"
 
-#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING    // To avoid receiving deprecation error since we are using C++11 only
-#include <experimental/filesystem>
+#include <filesystem>
 
 #include <map>
 #include <memory>
@@ -110,7 +109,7 @@ namespace cauldron
         /**
          * @brief   Loads a glTF file into the scene.
          */
-        void LoadGLTFToScene(std::experimental::filesystem::path& gltfFile);
+        void LoadGLTFToScene(std::filesystem::path& gltfFile);
 
         /**
          * @brief   Loads a number of particle spawners into the scene.

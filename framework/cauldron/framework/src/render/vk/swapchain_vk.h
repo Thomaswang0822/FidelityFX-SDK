@@ -73,7 +73,7 @@ namespace cauldron
         void WaitForSwapChain() override;
         void Present() override;
 
-        void DumpSwapChainToFile(std::experimental::filesystem::path filePath) override;
+        void DumpSwapChainToFile(std::filesystem::path filePath) override;
         void EnumerateDisplayModesAndFormats(const std::vector<VkSurfaceFormat2KHR>& formats2);
         void EnumerateHDRMetadata(VkPhysicalDevice                 PhysicalDevice,
                                   VkPhysicalDeviceSurfaceInfo2KHR& physicalDeviceSurfaceInfo2,

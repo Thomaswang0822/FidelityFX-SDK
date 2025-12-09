@@ -71,8 +71,6 @@
 #include "pix/pix3.h"
 #define PIX_CAPTURE_PATH L"tempPix.wpix"
 
-using namespace std::experimental;
-
 // map DisplayMode values to JSON as strings
 NLOHMANN_JSON_SERIALIZE_ENUM(DisplayMode, {
     {DisplayMode::DISPLAYMODE_LDR,           "DISPLAYMODE_LDR"          },
@@ -410,7 +408,7 @@ namespace cauldron
         // Request startup content
         for (const auto& scene : m_Config.StartupContent.Scenes)
         {
-            filesystem::path contentPath = scene.c_str();
+            std::filesystem::path contentPath = scene.c_str();
             // Only GLTF is supported now
             if (contentPath.extension() == L".gltf")
                 GetContentManager()->LoadGLTFToScene(contentPath);
@@ -436,7 +434,7 @@ namespace cauldron
         if (m_Config.TakeScreenshot)
         {
             // If we are bencharmking, use the benchmarking path
-            filesystem::path outputPath;
+            std::filesystem::path outputPath;
             if (m_Config.EnableBenchmark)
             {
                 outputPath = m_Config.BenchmarkPath;
@@ -448,7 +446,7 @@ namespace cauldron
 
             // Defensive, in case path doesn't exist
             if (!outputPath.empty())
-                filesystem::create_directory(outputPath);
+                std::filesystem::create_directory(outputPath);
 
             // Make a file name that is unique (sample name exe + permutations of interest + time stamp to seconds)
             std::wstringstream fileName;
@@ -494,11 +492,11 @@ namespace cauldron
         // Output Perf Stats
         if (m_Config.EnableBenchmark && m_PerfFrameCount > 0)
         {
-            filesystem::path outputPath(m_Config.BenchmarkPath);
+            std::filesystem::path outputPath(m_Config.BenchmarkPath);
 
             // Defensive, in case path doesn't exist
             if (!m_Config.BenchmarkPath.empty())
-                filesystem::create_directory(m_Config.BenchmarkPath);
+                std::filesystem::create_directory(m_Config.BenchmarkPath);
 
             std::wstring fileName;
             if (m_Config.BenchmarkAppend)
@@ -520,7 +518,7 @@ namespace cauldron
             }
 
             // Open for writing
-            filesystem::path outputFile = outputPath / fileName;
+            std::filesystem::path outputFile = outputPath / fileName;
             // create the file if it does not exist
             std::wofstream   file(outputFile.c_str(), m_Config.BenchmarkAppend ? std::ios_base::app : std::ios_base::out);
             if (m_Config.BenchmarkAppend)
@@ -882,8 +880,8 @@ namespace cauldron
                 {
                     // If we have a valid path to a scene file, queue it up
                     // (Note these scenes can be overridden by passing (a) scene(s) to load on the command line)
-                    filesystem::path sceneFile = filesystem::path(StringToWString(loadingContent["Scenes"][sceneId]));
-                    if (filesystem::exists(sceneFile)) {
+                    std::filesystem::path sceneFile = std::filesystem::path(StringToWString(loadingContent["Scenes"][sceneId]));
+                    if (std::filesystem::exists(sceneFile)) {
                         m_Config.StartupContent.Scenes.push_back(sceneFile);
                     }
                 }
@@ -929,7 +927,7 @@ namespace cauldron
                     ParticleSpawnerDesc spawnDesc = {};
 
                     spawnDesc.Name = StringToWString(spawner.value("Name", ""));
-                    spawnDesc.AtlasPath = filesystem::path(StringToWString(spawner.value("AtlasPath", "")));
+                    spawnDesc.AtlasPath = std::filesystem::path(StringToWString(spawner.value("AtlasPath", "")));
                     spawnDesc.Position = Vec3(spawner["Position"][0], spawner["Position"][1], spawner["Position"][2]);
                     spawnDesc.Sort = spawner.value("Sort", true);
 
@@ -1023,8 +1021,8 @@ namespace cauldron
                     std::string lowerCaseRMConfigName = rmInfo.Name;
                     std::transform(rmInfo.Name.begin(), rmInfo.Name.end(), lowerCaseRMConfigName.begin(), [](unsigned char c) { return std::tolower(c); });
 
-                    const auto configPath = filesystem::path("configs\\rm_configs\\" + lowerCaseRMConfigName + ".json");
-                    if (filesystem::exists(configPath))
+                    const auto configPath = std::filesystem::path("configs\\rm_configs\\" + lowerCaseRMConfigName + ".json");
+                    if (std::filesystem::exists(configPath))
                     {
                         json rmConfigData;
                         CauldronAssert(ASSERT_CRITICAL, ParseJsonFile(configPath.c_str(), rmConfigData), L"Could not parse JSON file %ls", rmInfo.Name);
@@ -1143,7 +1141,7 @@ namespace cauldron
         }
 
         // Paths the input should be folder path to frame capture, like NPP_JI
-        filesystem::path parentPath;
+        std::filesystem::path parentPath;
         if (hackOptions.find("HackPaths") != hackOptions.end())
         {
             m_Config.HackOptions.hackPaths.push_back(StringToWString(hackOptions.value<std::string>(
@@ -1151,7 +1149,7 @@ namespace cauldron
             ));
 
             /// we need 3 entries of 2 subfolders:
-            parentPath = filesystem::path(m_Config.HackOptions.hackPaths.front()).parent_path();
+            parentPath = std::filesystem::path(m_Config.HackOptions.hackPaths.front()).parent_path();
             auto jitterPath = parentPath / "MVD_JI";
             m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
             m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
@@ -1171,13 +1169,13 @@ namespace cauldron
         }
 
         // First, we make do a sanity check: exr file numbers should match 
-        auto count_exr_files = [](const filesystem::path& folderPath) {
-            return std::count_if(filesystem::directory_iterator(folderPath), filesystem::directory_iterator{}, [](const auto& entry) {
+        auto count_exr_files = [](const std::filesystem::path& folderPath) {
+            return std::count_if(std::filesystem::directory_iterator(folderPath), std::filesystem::directory_iterator{}, [](const auto& entry) {
                 return entry.path().extension() == ".exr";
             });
         };
-        const auto nTargets    = count_exr_files(filesystem::path(m_Config.HackOptions.hackPaths.front()));
-        const auto jitterCount = count_exr_files(filesystem::path(m_Config.HackOptions.hackPaths.back()));
+        const auto nTargets    = count_exr_files(std::filesystem::path(m_Config.HackOptions.hackPaths.front()));
+        const auto jitterCount = count_exr_files(std::filesystem::path(m_Config.HackOptions.hackPaths.back()));
         CauldronAssert(
             ASSERT_ERROR, nTargets == jitterCount, 
             L"frame capture count and jitter count should match, but got %d and %d", nTargets, jitterCount);
@@ -1722,9 +1720,9 @@ namespace cauldron
 
                 m_Config.HackOptions.hackPaths.push_back(pArgList[currentArg + 1]);
                 /// we need 3 entries of 2 subfolders:
-                auto parentPath = filesystem::path(m_Config.HackOptions.hackPaths.front()).parent_path();
+                auto parentPath = std::filesystem::path(m_Config.HackOptions.hackPaths.front()).parent_path();
                 auto jitterPath = parentPath / "MVD_JI";
-                CauldronAssert(ASSERT_ERROR, filesystem::exists(jitterPath), L"Encoded MVs and Depths exr files must be stored in %s", jitterPath.c_str());
+                CauldronAssert(ASSERT_ERROR, std::filesystem::exists(jitterPath), L"Encoded MVs and Depths exr files must be stored in %s", jitterPath.c_str());
                 m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
                 m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
 

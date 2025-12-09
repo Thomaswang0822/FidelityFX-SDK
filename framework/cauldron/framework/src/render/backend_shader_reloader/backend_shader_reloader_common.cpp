@@ -29,17 +29,16 @@
 #include "misc/helpers.h"
 #include "misc/log.h"
 
-#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING
-#include <experimental/filesystem>
+#include <filesystem>
 
 HMODULE backend_shader_reloader::LoadBackendDll(
     const std::string& dllPath,
     const std::string& dllNameNoExt)
 {
-    // Use filesystem::path to normalize the path because the move command requires backslash '\',
+    // Use std::filesystem::path to normalize the path because the move command requires backslash '\',
     // but FFX_SDK_BUILD_ROOT and FFX_SDK_ROOT use fowardslash '/' because cmake does it that way.
-    std::experimental::filesystem::path pdbPath = dllPath + dllNameNoExt + ".pdb";
-    std::experimental::filesystem::path movePdbPath = dllPath + dllNameNoExt + ".pdb.bak";
+    std::filesystem::path pdbPath(dllPath + dllNameNoExt + ".pdb");
+    std::filesystem::path movePdbPath(dllPath + dllNameNoExt + ".pdb.bak");
     try
     {
         // Move the debug symbols because if Visual Studio IDE loads them then when FreeLibrary is called it

@@ -61,7 +61,7 @@ namespace cauldron
         void WaitForSwapChain() override;
         void Present() override;
 
-        void DumpSwapChainToFile(std::experimental::filesystem::path filePath) override;
+        void DumpSwapChainToFile(std::filesystem::path filePath) override;
 
         void EnumerateOutputs();
         void FindCurrentOutput();

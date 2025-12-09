@@ -134,7 +134,7 @@ namespace cauldron
         /**
          * @brief   Creates a screenshot of the current swap chain.
          */
-        virtual void DumpSwapChainToFile(std::experimental::filesystem::path filePath) = 0;
+        virtual void DumpSwapChainToFile(std::filesystem::path filePath) = 0;
 
         /**
          * @brief   Verifies if requested display mode can be supported.

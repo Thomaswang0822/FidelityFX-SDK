@@ -35,7 +35,6 @@
 #include "shaders/surfacerendercommon.h"
 
 using namespace cauldron;
-using namespace std::experimental;
 
 constexpr uint32_t g_NumThreadX = 8;
 constexpr uint32_t g_NumThreadY = 8;

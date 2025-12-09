@@ -37,8 +37,6 @@
 #include "tinyexr.h"
 #endif  // !TINYEXR_IMPLEMENTATION
 
-using namespace std::experimental;
-
 namespace cauldron
 {
     template <typename T>
@@ -267,7 +265,7 @@ namespace cauldron
     {
         TextureLoadInfo& loadInfo = *reinterpret_cast<TextureLoadInfo*>(pParam);
 
-        bool fileExists = filesystem::exists(loadInfo.TextureFile);
+        bool fileExists = std::filesystem::exists(loadInfo.TextureFile);
         CauldronAssert(ASSERT_ERROR, fileExists, L"Could not find texture file %ls. Please run ClearMediaCache.bat followed by UpdateMedia.bat to sync to latest media.", loadInfo.TextureFile.c_str());
 
         if (fileExists)
@@ -474,7 +472,7 @@ namespace cauldron
 
     }
 
-    bool WICTextureDataBlock::LoadTextureData(filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc)
+    bool WICTextureDataBlock::LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc)
     {
         std::string fileName = textureFile.u8string();
 
@@ -530,7 +528,7 @@ namespace cauldron
        delete [] m_pData;
     }
 
-    bool EXRTextureDataBlock::LoadTextureData(filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc)
+    bool EXRTextureDataBlock::LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc)
     {
         // Set texture format at the very beginning
         texDesc.Format = this->m_Format;
@@ -813,7 +811,7 @@ namespace cauldron
     }
 
     bool EXRTextureDataBlock::LoadJitterData1K(
-        std::experimental::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc, SpecialChannelType channelType)
+        std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc, SpecialChannelType channelType)
     {
         CauldronAssert(ASSERT_ERROR, channelType != SpecialChannelType::ColorRGB, L"RGB color should not be read by this function.");
 
@@ -1033,54 +1031,34 @@ namespace cauldron
         return true;
     }
 
-    size_t EXRTextureDataBlock::TraverseFolder(std::wstring                          folderPath,
-                                               std::vector<filesystem::path>&        outPaths,
-                                               bool                                  extractJitter,
-                                               std::vector<std::pair<float, float>>& jitterXY)
+    bool EXRTextureDataBlock::ParseJitter(const std::vector<std::filesystem::path>& exrPaths, std::vector<std::pair<float, float>>& jitterXY)
     {
-        outPaths.clear();
-        for (const auto& entry : filesystem::directory_iterator(folderPath))
+        jitterXY.clear();
+        for (const auto& entry : exrPaths)
         {
-            if (entry.path().extension() == ".exr")
+            /// A typical input looks like this, but path splitting on underscore is quite error-prone.
+            /// Example: NPP_beauty_2472_0000_0_-0.40563965_-0.35599041.exr
+            try
             {
-                outPaths.push_back(entry.path());
+                std::string pathStr = entry.stem().generic_string();
+
+                size_t lastDelim       = pathStr.find_last_of('_');
+                size_t secondLastDelim = pathStr.find_last_of('_', lastDelim - 1);
+                CauldronAssert(ASSERT_ERROR,
+                               lastDelim != std::string::npos && secondLastDelim != std::string::npos,
+                               L"EXR jitter filename %ls does not have expected number of underscores.",
+                               StringToWString(pathStr).c_str());
+
+                // 2nd-last X, last Y
+                jitterXY.push_back({std::stof(pathStr.substr(secondLastDelim + 1, lastDelim - secondLastDelim - 1)), std::stof(pathStr.substr(lastDelim + 1))});
             }
-        }
-        // Sort files to ensure proper frame order (assuming filenames contain frame numbers)
-        std::sort(outPaths.begin(), outPaths.end());
-
-        // Then iterate the sorted list to keey the jitter order consistent
-        if (extractJitter)
-        {
-            // this func is also called when reading MV and Depths, so we clear conditionally.
-            jitterXY.clear();
-            for (const auto& entry : outPaths)
+            catch (const std::exception& e)
             {
-                /// Example: NPP_beauty_2472_0000_0_-0.40563965_-0.35599041
-                /// NOTE: both XY are .8f with range in [-0.5, 0.5]
-                try
-                {
-                    std::string pathStr = entry.stem().generic_string();
-
-                    size_t lastDelim       = pathStr.find_last_of('_');
-                    size_t secondLastDelim = pathStr.find_last_of('_', lastDelim - 1);
-                    CauldronAssert(ASSERT_ERROR,
-                                   lastDelim != std::string::npos && secondLastDelim != std::string::npos,
-                                   L"EXR jitter filename %ls does not have expected number of underscores.",
-                                   pathStr);
-
-                    // 2nd-last X, last Y
-                    jitterXY.push_back(
-                        {std::stof(pathStr.substr(secondLastDelim + 1, lastDelim - secondLastDelim - 1)), std::stof(pathStr.substr(lastDelim + 1))});
-                }
-                catch (const std::exception& e)
-                {
-                    CauldronError(L"%s", e.what());
-                }
+                return false;
             }
         }
 
-        return outPaths.size();
+        return true;
     }
 
 
@@ -1240,7 +1218,7 @@ namespace cauldron
         delete m_pData;
     }
 
-    bool DDSTextureDataBlock::LoadTextureData(filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc)
+    bool DDSTextureDataBlock::LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc)
     {
         typedef enum RESOURCE_DIMENSION
         {
@@ -1372,7 +1350,7 @@ namespace cauldron
         m_pData = nullptr;  // We don't own this data
     }
 
-    bool MemTextureDataBlock::LoadTextureData(filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc)
+    bool MemTextureDataBlock::LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc)
     {
         CauldronError(L"MemTextureDataBlock does not support calls to LoadTextureData.");
         return false;

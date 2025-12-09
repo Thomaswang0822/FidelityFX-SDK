@@ -27,9 +27,7 @@
 #include "misc/assert.h"
 #include "misc/fileio.h"
 
-#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING    // To avoid receiving deprecation error since we are using C++11 only
-#include <experimental/filesystem>
-using namespace std::experimental;
+#include <filesystem>
 #include <sstream>
 
 #include <wrl.h>
@@ -58,10 +56,10 @@ namespace cauldron
         ULONG Release() { return 0; }
         HRESULT LoadSource(LPCWSTR pFilename, IDxcBlob** ppIncludeSource)
         {
-            filesystem::path file = filesystem::current_path();
+            std::filesystem::path file = std::filesystem::current_path();
             file.append(L"shaders");
             file.append(pFilename);
-            bool fileExists = filesystem::exists(file);
+            bool fileExists = std::filesystem::exists(file);
 
             CauldronAssert(ASSERT_ERROR, fileExists, L"Could not find include file for reading %ls", pFilename);
             if (!fileExists)
@@ -179,7 +177,7 @@ namespace cauldron
         hashString += L".lld";
 
         // Get our exe path
-        filesystem::path pdbPath = filesystem::current_path();
+        std::filesystem::path pdbPath = std::filesystem::current_path();
         pdbPath.append(L"DX12PDBs");
         pdbPath.append(hashString.c_str());
 
@@ -335,7 +333,7 @@ namespace cauldron
         if (pPDBBlob && pPDBBlob->GetBufferSize() > 0 && pPDBBlob->GetBufferPointer() != nullptr)
         {
             // create folder if necessary
-            filesystem::create_directories(pdbPath.parent_path());
+            std::filesystem::create_directories(pdbPath.parent_path());
             std::ofstream f(pdbPath.c_str(), std::ofstream::binary);
             f.write(reinterpret_cast<const char*>(pPDBBlob->GetBufferPointer()), pPDBBlob->GetBufferSize());
             f.close();

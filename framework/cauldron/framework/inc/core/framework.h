@@ -249,7 +249,7 @@ namespace cauldron
         std::wstring                  AppName = L"";
 
         // Screenshot name (for use with perf output when specified)
-        std::experimental::filesystem::path ScreenShotFileName = L"";
+        std::filesystem::path ScreenShotFileName = L"";
 
         void Validate() const;
         const wchar_t* GetAliasedResourceName(const wchar_t* resourceName) const;

@@ -47,8 +47,7 @@
 #include "render/vk/swapchain_vk.h"
 #endif  // FFX_API_DX12
 
-#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING    // To avoid receiving deprecation error since we are using C++11 only
-#include <experimental/filesystem>
+#include <filesystem>
 #include <directx/d3dx12_core.h>
 
 #include <unordered_map>
@@ -137,7 +136,7 @@ namespace SRV_debug
 
 using namespace std;
 using namespace cauldron;
-namespace fs = std::experimental::filesystem;
+namespace fs = std::filesystem;
 
 void RestoreApplicationSwapChain(bool recreateSwapchain = true);
 
@@ -177,10 +176,24 @@ bool FSRRenderModule::LoadHackTextures()
         L"Cannot support 1.7x or custom scale ratio when EnableHack is on.");
 
     const ResolutionInfo& resInfo = GetFramework()->GetResolutionInfo();
-    std::vector<std::experimental::filesystem::path> exrFiles;
+    std::vector<std::filesystem::path> exrFiles;
 
     size_t       nTextures;
     std::wstring rtFullname;
+
+    // Populate exr filepath lists and return count
+    auto populatePathList = [](std::wstring folderPath, std::vector<std::filesystem::path>& outPaths) -> size_t {
+        outPaths.clear();
+        for (const auto& entry : filesystem::directory_iterator(folderPath))
+        {
+            if (entry.path().extension() == ".exr")
+                outPaths.push_back(entry.path());
+        }
+        // Sort files to ensure proper frame order (assuming filenames contain frame numbers)
+        std::sort(outPaths.begin(), outPaths.end()); 
+
+        return outPaths.size();
+    };
 
     for (int typeIdx=0; typeIdx<3; ++typeIdx)
     {
@@ -190,10 +203,13 @@ bool FSRRenderModule::LoadHackTextures()
         // grab all exr files of current input type, parse jitter if reading ColorRGB
         bool parseJitter = GetFramework()->GetConfig()->HackOptions.parseJitter && 
                            type == EXRTextureDataBlock::SpecialChannelType::ColorRGB;
-        nTextures        = EXRTextureDataBlock::TraverseFolder(textureLoadPaths[typeIdx], exrFiles, parseJitter, m_pHackJitterXY);
+
+        nTextures        = populatePathList(textureLoadPaths[typeIdx], exrFiles);
         CauldronAssert(ASSERT_CRITICAL, nTextures == hackOptions.frameCount, 
-                       L"No. input files counted by EXRTextureDataBlock::TraverseFolder() (%d) and lambda function (%d) don't match.",
+                       L"No. input files counted by EXRTextureDataBlock::ParseJitter() (%d) and lambda function (%d) don't match.",
                        nTextures, hackOptions.frameCount);
+        if (parseJitter)
+            EXRTextureDataBlock::ParseJitter(exrFiles, m_pHackJitterXY);
 
         /// NOTE: hackOptions.frameCount is the fixed total number of frames to load,
         /// but user can set a smaller hackOptions.outputMaxCount to check in test runs.
@@ -960,7 +976,7 @@ bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, cons
     GPUResource*        resource      = GPUResource::GetWrappedResourceFromSDK(
         StringToWString(customName).c_str(), debugResource.resource, &textureDesc, resourceState);
     
-    std::experimental::filesystem::path outputPath(hackOptions.outPath != L"" ? hackOptions.outPath : L"../media/TEST_SCENE/outputs");
+    std::filesystem::path outputPath(hackOptions.outPath != L"" ? hackOptions.outPath : L"../media/TEST_SCENE/outputs");
     // construct the full filename as <output_dir>/<identifier>_<frame_id formatted to 3 digits>.exr
     std::string idString = std::to_string(frameID);
     std::string filename = 
@@ -1115,7 +1131,7 @@ bool FSRRenderModule::ExportDebugFrame2Inputs(
     CauldronAssert(ASSERT_CRITICAL, (nCh == 1 && sameFormat), L"ExportDebugFrame2Inputs only supports (1，1) input format for now.");
 
 
-    std::experimental::filesystem::path outputPath(hackOptions.enableHack ? hackOptions.outPath : L"../media/TEST_SCENE/outputs");
+    std::filesystem::path outputPath(hackOptions.enableHack ? hackOptions.outPath : L"../media/TEST_SCENE/outputs");
     // construct the full filename as <output_dir>/<identifier>_<frame_id formatted to 3 digits>.exr
     std::string idString = std::to_string(frameID);
     std::string filename =

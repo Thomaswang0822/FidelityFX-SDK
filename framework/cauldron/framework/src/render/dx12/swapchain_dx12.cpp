@@ -39,8 +39,6 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb/stb_image_write.h"
 
-using namespace std::experimental;
-
 namespace cauldron
 {
     //////////////////////////////////////////////////////////////////////////
@@ -184,7 +182,7 @@ namespace cauldron
         }
     }
 
-    void SwapChainInternal::DumpSwapChainToFile(filesystem::path filePath)
+    void SwapChainInternal::DumpSwapChainToFile(std::filesystem::path filePath)
     {
         D3D12_RESOURCE_DESC fromDesc = m_pRenderTarget->GetCurrentResource()->GetImpl()->DX12Desc();
 

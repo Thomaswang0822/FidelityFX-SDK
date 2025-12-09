@@ -32,8 +32,6 @@
 
 #include <windowsx.h>
 
-using namespace std::experimental;
-
 namespace cauldron
 {
     static const wchar_t* const s_WINDOW_CLASS_NAME = L"CauldronSample";
@@ -62,7 +60,7 @@ namespace cauldron
         // Store the exe name for identifier purposes (used in benchmark gathering)
         wchar_t buf[MAX_PATH];
         GetModuleFileNameW(nullptr, buf, MAX_PATH);
-        filesystem::path filePath = buf;
+        std::filesystem::path filePath = buf;
         m_pFramework->m_Config.AppName = filePath.filename();
 
         // Setup the window for the sample

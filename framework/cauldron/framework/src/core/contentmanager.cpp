@@ -31,8 +31,6 @@
 #include "render/material.h"
 #include "render/texture.h"
 
-using namespace std::experimental;
-
 namespace cauldron
 {
     ContentManager::ContentManager()
@@ -71,7 +69,7 @@ namespace cauldron
 
     }
 
-    void ContentManager::LoadGLTFToScene(filesystem::path& gltfFile)
+    void ContentManager::LoadGLTFToScene(std::filesystem::path& gltfFile)
     {
         // Perform an asynchronous load from the gltf loader
         ContentLoader* pLoader = m_ContentLoaders[static_cast<uint32_t>(LoaderType::GLTF)];

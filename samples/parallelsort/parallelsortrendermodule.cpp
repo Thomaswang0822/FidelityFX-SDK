@@ -43,7 +43,6 @@
 #include <random>
 
 using namespace cauldron;
-using namespace std::experimental;
 
 const uint32_t ParallelSortRenderModule::s_NumKeys[ResSize_Count] = { 1920 * 1080, 2560 * 1440, 3840 * 2160 };
 
@@ -142,11 +141,11 @@ void ParallelSortRenderModule::Init(const json& initData)
     m_pPipelineObj = PipelineObject::CreatePipelineObject(L"ParallelSortVerification_PipelineObj", psoDesc);
 
     // Load the texture data from which to create the texture
-    filesystem::path texturePath1080p = L"..\\media\\Textures\\ParallelSort\\parallelsort_validate1080p.png";
+    std::filesystem::path texturePath1080p = L"..\\media\\Textures\\ParallelSort\\parallelsort_validate1080p.png";
 
-    filesystem::path texturePath2K = L"..\\media\\Textures\\ParallelSort\\parallelsort_validate2K.png";
+    std::filesystem::path texturePath2K = L"..\\media\\Textures\\ParallelSort\\parallelsort_validate2K.png";
 
-    filesystem::path texturePath4K = L"..\\media\\Textures\\ParallelSort\\parallelsort_validate4K.png";
+    std::filesystem::path texturePath4K = L"..\\media\\Textures\\ParallelSort\\parallelsort_validate4K.png";
 
     TextureLoadCompletionCallbackFn completionCallback = [this](const std::vector<const Texture*>& textures, void* additionalParams = nullptr) { this->TextureLoadComplete(textures, additionalParams); };
     GetContentManager()->LoadTextures(

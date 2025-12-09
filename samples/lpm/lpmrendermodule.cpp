@@ -37,7 +37,6 @@
 #include "render/swapchain.h"
 
 using namespace cauldron;
-using namespace std::experimental;
 
 void LPMRenderModule::Init(const json& initData)
 {
@@ -113,7 +112,7 @@ void LPMRenderModule::Init(const json& initData)
 
     // Using AllowRenderTarget + AllowUnorderedAccess on the same resource is usually frowned upon for performance reasons, but we are doing it here in the interest of re-using a resource
     TextureLoadCompletionCallbackFn completionCallback = [this](const std::vector<const Texture*>& textures, void* additionalParams = nullptr) { this->TextureLoadComplete(textures, additionalParams); };
-    filesystem::path texturePath = L"..\\media\\Textures\\LPM\\LuxoDoubleChecker_EXR_ARGB_16F_1.dds";
+    std::filesystem::path texturePath = L"..\\media\\Textures\\LPM\\LuxoDoubleChecker_EXR_ARGB_16F_1.dds";
     GetContentManager()->LoadTexture(TextureLoadInfo(texturePath, false, 1.f, ResourceFlags::None), completionCallback);
 }
 

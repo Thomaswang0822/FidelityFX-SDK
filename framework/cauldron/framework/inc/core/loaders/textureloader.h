@@ -26,8 +26,7 @@
 #include "misc/helpers.h"
 #include "render/texture.h"
 
-#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING    // To avoid receiving deprecation error since we are using C++11 only
-#include <experimental/filesystem>
+#include <filesystem>
 
 #include <functional>
 #include <shaders/shadercommon.h>
@@ -52,12 +51,12 @@ namespace cauldron
      */
     struct TextureLoadInfo
     {
-        std::experimental::filesystem::path TextureFile;                    ///< Path to the texture to load.
+        std::filesystem::path TextureFile;                    ///< Path to the texture to load.
         bool                                SRGB = true;                    ///< If we need this to be in SRGB format.
         float                               AlphaThreshold = 1.f;           ///< Alpha threshold for alpha generation.
         ResourceFlags                       Flags = ResourceFlags::None;    ///< <c><i>ResourceFlags</i></c> for the loaded <c><i>Texture</i></c>.
 
-        TextureLoadInfo(std::experimental::filesystem::path file, bool srgb = true, float alphaThreshold = 1.f, ResourceFlags flags = ResourceFlags::None) : TextureFile(file), SRGB(srgb), AlphaThreshold(alphaThreshold), Flags(flags) {};
+        TextureLoadInfo(std::filesystem::path file, bool srgb = true, float alphaThreshold = 1.f, ResourceFlags flags = ResourceFlags::None) : TextureFile(file), SRGB(srgb), AlphaThreshold(alphaThreshold), Flags(flags) {};
     };
 
     /**
@@ -156,7 +155,7 @@ namespace cauldron
         /**
          * @brief   Loads the texture data to memory according to the DataBlock type.
          */
-        virtual bool LoadTextureData(std::experimental::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) = 0;
+        virtual bool LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) = 0;
 
         /**
          * @brief   Copies the texture data to the resource's backing memory.
@@ -186,7 +185,7 @@ namespace cauldron
         /**
          * @brief   Loads the texture data to memory according to the DataBlock type.
          */
-        virtual bool LoadTextureData(std::experimental::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
+        virtual bool LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
 
         
         /**
@@ -233,7 +232,7 @@ namespace cauldron
         {}
         virtual ~EXRTextureDataBlock();
 
-        virtual bool LoadTextureData(std::experimental::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
+        virtual bool LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
 
         virtual void CopyTextureData(void* pDest, uint32_t stride, uint32_t widthStride, uint32_t height, uint32_t sliceOffset) override;
 
@@ -247,7 +246,7 @@ namespace cauldron
          * 
          * @return               If loading succeeded
          */
-        bool LoadJitterData1K(std::experimental::filesystem::path& textureFile, 
+        bool LoadJitterData1K(std::filesystem::path& textureFile, 
                               float alphaThreshold, 
                               TextureDesc& texDesc,
                               SpecialChannelType channelType);
@@ -270,16 +269,15 @@ namespace cauldron
         bool CreateDebugCoordinateTexture(TextureDesc& texDesc);
 
         /**
-         * @brief Given a folder path, find all exr file paths. Also, optionally store jitter xy float2 from filenames.
+         * @brief Given a list of all exr file paths, extract jitter from filename and store to output vector
          * 
-         * @param outPaths Ref to a vector to save the paths.
-         * @param extractJitter Whether to extract jitter xy from filenames. Now we only have them in 1k inputs
-         * @param jitterXY If extractJitter, store data here.
+         * @param exrPaths const ref to a vector of input exr.
+         * @param jitterXY Store data here.
+         * 
+         * @return Success or not
          */
-        static size_t TraverseFolder(std::wstring                                      folderPath,
-                                     std::vector<std::experimental::filesystem::path>& outPaths,
-                                     bool                                              extractJitter,
-                                     std::vector<std::pair<float, float>>&             jitterXY);
+        static bool ParseJitter(const std::vector<std::filesystem::path>& exrPaths,
+                                std::vector<std::pair<float, float>>&                   jitterXY);
 
 
     private:
@@ -310,7 +308,7 @@ namespace cauldron
         /**
          * @brief   Loads the texture data to memory according to the DataBlock type.
          */
-        virtual bool LoadTextureData(std::experimental::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
+        virtual bool LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
 
         /**
          * @brief   Copies the texture data to the resource's backing memory.
@@ -338,7 +336,7 @@ namespace cauldron
          * @brief   As the MemTextureDataBlock is backed by memory already, LoadTextureData does nothing and should not be called.
          *          This function will assert if called.
          */
-        virtual bool LoadTextureData(std::experimental::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
+        virtual bool LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
 
         /**
          * @brief   Copies the texture data to the resource's backing memory.

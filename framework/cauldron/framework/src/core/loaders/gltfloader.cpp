@@ -43,7 +43,6 @@
 
 #include <string>
 
-using namespace std::experimental;
 using namespace math;
 
 namespace cauldron
@@ -293,7 +292,7 @@ namespace cauldron
     void GLTFLoader::LoadAsync(void* pLoadParams)
     {
         // Allocate path information for duration we need it
-        filesystem::path* pPathInfo = new filesystem::path(*reinterpret_cast<filesystem::path*>(pLoadParams));
+        std::filesystem::path* pPathInfo = new std::filesystem::path(*reinterpret_cast<std::filesystem::path*>(pLoadParams));
 
         // Enqueue the task to load content
         Task loadingTask(std::bind(&GLTFLoader::LoadGLTFContent, this, std::placeholders::_1), pPathInfo);
@@ -308,15 +307,15 @@ namespace cauldron
     // Handler to load all glTF related assets and content
     void GLTFLoader::LoadGLTFContent(void* pParam)
     {
-        filesystem::path* pFileToLoad = reinterpret_cast<filesystem::path*>(pParam);
+        std::filesystem::path* pFileToLoad = reinterpret_cast<std::filesystem::path*>(pParam);
 
-        bool fileExists = filesystem::exists(*pFileToLoad);
+        bool fileExists = std::filesystem::exists(*pFileToLoad);
         CauldronAssert(ASSERT_ERROR, fileExists, L"Could not load GLTF file %ls", pFileToLoad->c_str());
 
         if (fileExists)
         {
             // Grab the path without the filename for resource loading
-            filesystem::path filePath = pFileToLoad->parent_path();
+            std::filesystem::path filePath = pFileToLoad->parent_path();
             std::wstring filePathString = filePath.c_str();
             filePathString.append(L"\\");
 
@@ -488,7 +487,7 @@ namespace cauldron
                 for (size_t i = 0; i < images.size(); ++i)
                 {
                     const std::string& uriName = images[i]["uri"];
-                    filesystem::path filePath = filePathString + StringToWString(uriName);
+                    std::filesystem::path filePath = filePathString + StringToWString(uriName);
 
                     // Push the load info
                     texLoadInfo.push_back(TextureLoadInfo(filePath, textureSRGBMap[i]));
@@ -520,8 +519,8 @@ namespace cauldron
 
                     // Verify the file exists, otherwise we don't want to load
                     // We can get around textures not being there, but not whole buffer info
-                    filesystem::path uriFile(pBufferLoadParams->BufferName);
-                    CauldronAssert(ASSERT_ERROR, filesystem::exists(uriFile), L"Buffer file %ls does not exist", pBufferLoadParams->BufferName.c_str());
+                    std::filesystem::path uriFile(pBufferLoadParams->BufferName);
+                    CauldronAssert(ASSERT_ERROR, std::filesystem::exists(uriFile), L"Buffer file %ls does not exist", pBufferLoadParams->BufferName.c_str());
 
                     // Push the task
                     taskList.push(Task(&GLTFLoader::LoadGLTFBuffer, pBufferLoadParams, pCompletionCallback));
