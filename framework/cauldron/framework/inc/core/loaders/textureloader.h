@@ -216,6 +216,9 @@ namespace cauldron
     class EXRTextureDataBlock : public TextureDataBlock
     {
     public:
+        static constexpr size_t Width1K  = 1920;
+        static constexpr size_t Height1K = 1080;
+        static constexpr size_t PixelCount1K = Width1K * Height1K;
         enum class SpecialChannelType : int
         {
             ColorRGB = 0,       // format handled by SetResourceFormat()
