@@ -39,6 +39,8 @@
 
 namespace cauldron
 {
+    std::map<std::pair<uint32_t, uint32_t>, std::wstring> EXRTextureDataBlock::AllSeenResolution;
+
     template <typename T>
     uint16_t convertToFP16(T value, uint32_t scale, ExportInfo::BitUnpackMode mode)
     {
@@ -795,6 +797,9 @@ namespace cauldron
         texDesc.DepthOrArraySize = 1;
         texDesc.Dimension        = TextureDimension::Texture2D;
 
+        // 9. Update bucket
+        AllSeenResolution.try_emplace({image.width, image.height}, textureFile.wstring());
+
         return true;
     }
 
@@ -903,7 +908,6 @@ namespace cauldron
         /// Output = 1k * m_UpscaleRatio = display resolution. This is how big to malloc.
         const size_t inputWidth  = static_cast<size_t>(image.width);
         const size_t inputHeight = static_cast<size_t>(image.height);
-        CauldronAssert(ASSERT_ERROR, inputWidth == Width1K && inputHeight == Height1K, L"Jitter EXR input must be 1k resolution.");
 
         // Allocate raw bytes array first, then reinterpret_cast to FP16 or FP32
         const auto [mallocWidth, mallocHeight] = GetFramework()->GetResolutionInfo().DisplayResolution();
@@ -973,6 +977,9 @@ namespace cauldron
         texDesc.MipLevels        = 1;
         texDesc.DepthOrArraySize = 1;
         texDesc.Dimension        = TextureDimension::Texture2D;
+
+        // Update bucket
+        AllSeenResolution.try_emplace({image.width, image.height}, textureFile.wstring());
 
         return true;
     }

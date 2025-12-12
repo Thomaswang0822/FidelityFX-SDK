@@ -263,8 +263,6 @@ namespace cauldron
         // Set width and height accordingly to what's been specified in config/command line
         m_ResolutionInfo = {m_Config.Width, m_Config.Height, m_Config.Width, m_Config.Height, m_Config.Width, m_Config.Height};
 
-        m_ResolutionInfo = {1920, 1080, 2560, 1440, 2560, 1440};
-
         // Init RenderDoc
         if(m_Config.EnableRenderDocCapture)
         {
@@ -1101,52 +1099,42 @@ namespace cauldron
         if (configData.find("HackOptions") == configData.end()) 
             return;
         
-        json hackOptions = configData["HackOptions"];
-        CauldronAssert(ASSERT_ERROR, hackOptions.find("EnableHack") != hackOptions.end(), L"HackOptions must have EnableHack field");
-        bool enableHack                 = hackOptions.value<bool>("EnableHack", false);
+        json jsonHackOptions = configData["HackOptions"];
+        CauldronAssert(ASSERT_ERROR, jsonHackOptions.find("EnableHack") != jsonHackOptions.end(), L"HackOptions must have EnableHack field");
+        bool enableHack                 = jsonHackOptions.value<bool>("EnableHack", false);
         m_Config.HackOptions.enableHack = enableHack;
         if (!enableHack)
             return;
 
         // Identifier (scene name)
-        if (hackOptions.find("Identifier") != hackOptions.end())
+        if (jsonHackOptions.find("Identifier") != jsonHackOptions.end())
         {
-            m_Config.HackOptions.identifier = hackOptions.value<std::string>("Identifier", "UNDEFINED");
+            m_Config.HackOptions.identifier = jsonHackOptions.value<std::string>("Identifier", "UNDEFINED");
         }
         
-        // Render Resolution
-        if (hackOptions.find("DisplayResolution") != hackOptions.end())
+        // Render Resolution: only accept alias <1 or 2 or 4> in json config
+        if (jsonHackOptions.find("DisplayResolution") != jsonHackOptions.end())
         {
-            uint32_t resOption = hackOptions.value<uint32_t>("DisplayResolution", 1);
-            CauldronAssert(ASSERT_ERROR, resOption == 1 || resOption == 2 || resOption == 4, L"Render Resolution option must be <1 or 2 or 4>, got %d", resOption);
-            m_Config.HackOptions.displayResolution = static_cast<HackOptionDef::HackDisplayResolution>(resOption);
+            uint32_t resOption = jsonHackOptions.value<uint32_t>("DisplayResolution", 0);
+            // Using iterator let us check "if 1 or 2 or 4" only once.
+            auto     it        = AliasResolutionMap.find(resOption);
+            CauldronAssert(ASSERT_ERROR, it != AliasResolutionMap.end(), 
+                L"Render Resolution option must be <1 or 2 or 4>, got %d", resOption);
         
-            if (resOption == 1) {
-                m_Config.Width = 1920;
-                m_Config.Height = 1080;
-            }
-            else if (resOption == 2)
-            {
-                m_Config.Width  = 2560;
-                m_Config.Height = 1440;
-            }
-            else if (resOption == 4) {
-                m_Config.Width = 3840;
-                m_Config.Height = 2160;
-            }
+            std::tie(m_Config.Width, m_Config.Height) = it->second;
         }
 
         // Parse jitter or not
-        if (hackOptions.find("ParseJitter") != hackOptions.end())
+        if (jsonHackOptions.find("ParseJitter") != jsonHackOptions.end())
         {
-            m_Config.HackOptions.parseJitter = hackOptions.value("ParseJitter", false);
+            m_Config.HackOptions.parseJitter = jsonHackOptions.value("ParseJitter", false);
         }
 
         // Paths the input should be folder path to frame capture, like NPP_JI
         std::filesystem::path parentPath;
-        if (hackOptions.find("HackPaths") != hackOptions.end())
+        if (jsonHackOptions.find("HackPaths") != jsonHackOptions.end())
         {
-            m_Config.HackOptions.hackPaths.push_back(StringToWString(hackOptions.value<std::string>(
+            m_Config.HackOptions.hackPaths.push_back(StringToWString(jsonHackOptions.value<std::string>(
                 "HackPaths", "../media/TEST_SCENE/NPP_JI")
             ));
 
@@ -1157,11 +1145,11 @@ namespace cauldron
             m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
         }
 
-        m_Config.HackOptions.storeOutput = hackOptions.value("StoreOutput", false);
+        m_Config.HackOptions.storeOutput = jsonHackOptions.value("StoreOutput", false);
 
-        if (hackOptions.find("OutputPath") != hackOptions.end())
+        if (jsonHackOptions.find("OutputPath") != jsonHackOptions.end())
         {
-            m_Config.HackOptions.outPath = StringToWString(hackOptions.value<std::string>(
+            m_Config.HackOptions.outPath = StringToWString(jsonHackOptions.value<std::string>(
                 "OutputPath", "../media/TEST_SCENE/outputs"));
         }
         else
@@ -1176,17 +1164,17 @@ namespace cauldron
                 return entry.path().extension() == ".exr";
             });
         };
-        const auto nTargets    = count_exr_files(std::filesystem::path(m_Config.HackOptions.hackPaths.front()));
-        const auto jitterCount = count_exr_files(std::filesystem::path(m_Config.HackOptions.hackPaths.back()));
-        CauldronAssert(
-            ASSERT_ERROR, nTargets == jitterCount, 
-            L"frame capture count and jitter count should match, but got %d and %d", nTargets, jitterCount);
+        const auto colorCount = count_exr_files(std::filesystem::path(m_Config.HackOptions.hackPaths.front()));
+        const auto MVDCount   = count_exr_files(std::filesystem::path(m_Config.HackOptions.hackPaths.back()));
+        CauldronAssert(ASSERT_ERROR, colorCount == MVDCount, 
+            L"frame color count and MVD count should match, but got %d and %d", colorCount, MVDCount);
         
         // then set 2 counters:
         // outputMaxCount = frameCount (capture all output) if it's not set OR it's larger than frameCount
-        m_Config.HackOptions.frameCount = static_cast<size_t>(nTargets);
+        m_Config.HackOptions.frameCount = static_cast<size_t>(colorCount);
+        CauldronAssert(ASSERT_WARNING, m_Config.HackOptions.frameCount != 0, L"Found 0 input exr image");
         m_Config.HackOptions.outputMaxCount = std::min(
-            hackOptions.value<size_t>("OutputMaxCount", m_Config.HackOptions.frameCount), 
+            jsonHackOptions.value<size_t>("OutputMaxCount", m_Config.HackOptions.frameCount), 
             m_Config.HackOptions.frameCount);
     }
 
@@ -1361,8 +1349,33 @@ namespace cauldron
         int argCount;
         pArgList = CommandLineToArgvW(cmdLine, &argCount);
 
-        // Step into hack option mode in case any hack option conincide with existing names
-        bool         hackMode = false;
+        /// After boundary check, ensure exactly `numValues` values are given
+        /// and throw CauldronCritical if not.
+        auto ValidateArgValueCount = [](const LPWSTR* pArgStart, uint32_t numValues=1) {
+            bool isValid = true;
+            std::wstring placeholderStr(L"<input>");
+            // pArgStart points to the key, i.e. "-resolution"
+            auto argKey = pArgStart[0];
+
+            for (uint32_t i = 1; isValid && i <= numValues; i++) {
+                isValid &= pArgStart[i][0] != L'-';
+                // also expand the log string
+                placeholderStr += L" <input>";
+            }
+            // peek into next to catch too-many values, i.e. next should be a key with "-"
+            if (auto nxt = &pArgStart[numValues + 1]; nxt != nullptr)
+                isValid &= *nxt[0] == L'-';
+            
+            if (!isValid) {
+                CauldronCritical(L"%s requires %d input to be provided (usage: %s %s", 
+                    argKey, numValues, argKey, placeholderStr.c_str());
+            }
+            return isValid;
+        };
+
+        /// ParseCmdLine() happens after json config parse, and we allow any subset of hack options
+        /// to be overwritten, as long as hack mode is on.
+        bool hackMode = m_Config.HackOptions.enableHack;
 
         std::wstring command;
         for (int currentArg = 0; currentArg < argCount; ++currentArg)
@@ -1382,7 +1395,7 @@ namespace cauldron
             if (command == L"-cpulimiter")
             {
                 // We require 1 argument to limit fps
-                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-', L"No target frame rate provided when  -cpulimiter requested!");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
                 m_Config.LimitFPS = true;
                 m_Config.GPULimitFPS = false;
                 try
@@ -1400,7 +1413,7 @@ namespace cauldron
             else if (command == L"-gpulimiter")
             {
                 // We require 1 argument to limit fps
-                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-', L"No target frame rate provided when  -gpulimiter requested!");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
                 m_Config.LimitFPS = true;
                 m_Config.GPULimitFPS = true;
                 try
@@ -1420,7 +1433,7 @@ namespace cauldron
             if (command == L"-inverteddepth")
             {
                 // We require 1 argument to override depth
-                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-', L"-inverteddepth usage: -inverteddepth 1/0");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
                 bool invertedDepth = !(std::wstring(pArgList[currentArg + 1]) == L"0"); // disable with zero, anything else means "on"
                 m_Config.InvertedDepth = invertedDepth;
                 ++currentArg;
@@ -1438,7 +1451,7 @@ namespace cauldron
             if (command == L"-resolution")
             {
                 // We require 2 arguments to set resolution
-                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 2 && pArgList[currentArg + 1][0] != L'-' && pArgList[currentArg + 2][0] != L'-', L"-resolution requires a width and height be provided (usage: -resolution <width> <height>");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 2 && ValidateArgValueCount(&pArgList[currentArg], 2), L"");
                 try
                 {
                     uint32_t width = std::stoi(pArgList[currentArg + 1]);
@@ -1459,7 +1472,7 @@ namespace cauldron
             if (command == L"-loadcontent")
             {
                 // We require at least 1 argument to load content
-                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-', L"No content provided for loading when -loadcontent requested!");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
 
                 // Clear any queud up content (from config) as this is an override
                 m_Config.StartupContent.Scenes.clear();
@@ -1483,7 +1496,7 @@ namespace cauldron
             if (command == L"-diffuseibl")
             {
                 // We require at least 1 argument to load content
-                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-', L"No content provided for loading when -diffuseibl requested!");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
 
                 // If we've not encountered a new command, enqueue content to load
                 m_Config.StartupContent.DiffuseIBL = pArgList[currentArg + 1];
@@ -1497,7 +1510,7 @@ namespace cauldron
             if (command == L"-specularibl")
             {
                 // We require at least 1 argument to load content
-                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-', L"No content provided for loading when -specularibl requested!");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
 
                 // If we've not encountered a new command, enqueue content to load
                 m_Config.StartupContent.SpecularIBL = pArgList[currentArg + 1];
@@ -1511,7 +1524,7 @@ namespace cauldron
             if (command == L"-skymap")
             {
                 // We require at least 1 argument to load content
-                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-', L"No content provided for loading when -skymap requested!");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
 
                 // If we've not encountered a new command, enqueue content to load
                 m_Config.StartupContent.SkyMap = pArgList[currentArg + 1];
@@ -1524,7 +1537,7 @@ namespace cauldron
             // Override scene IBL factor
             if (command == L"-iblfactor")
             {
-                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-', L"-iblfactor requires a floating point IBL factor be provided (usage: -iblfactor <value>");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
                 try
                 {
                     float iblfactor = std::stof(pArgList[currentArg + 1]);
@@ -1544,7 +1557,7 @@ namespace cauldron
             if (command == L"-camera")
             {
                 // We require at least 1 argument to set camera
-                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-', L"No camera name provided when -camera requested!");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
 
                 // If we've not encountered a new command, enqueue content to load
                 m_Config.StartupContent.Camera = pArgList[currentArg + 1];
@@ -1557,7 +1570,7 @@ namespace cauldron
             // Override scene exposure
             if (command == L"-exposure")
             {
-                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-', L"-exposure requires a floating point exposure be provided (usage: -exposure <value>");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
                 try
                 {
                     float exposure = std::stof(pArgList[currentArg + 1]);
@@ -1648,9 +1661,7 @@ namespace cauldron
             if (command == L"-displaymode")
             {
                 // We require at least 1 argument to load content
-                CauldronAssert(ASSERT_CRITICAL,
-                               argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-',
-                               L"-displaymode requires a input to be provided (usage: -displaymode <input>");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
 
                 command = pArgList[currentArg + 1];
                 if (command == L"DISPLAYMODE_LDR")
@@ -1671,11 +1682,9 @@ namespace cauldron
                 currentArg += 1;
                 continue;
             }
-        
+
             if (command == L"-EnableHack")
             {
-                // we reset HackOptions otherwise bool fields can't be overwritten to false
-                m_Config.HackOptions            = HackOptionDef{};
                 hackMode = true;
                 m_Config.HackOptions.enableHack = true;
                 continue;
@@ -1684,9 +1693,7 @@ namespace cauldron
             if (hackMode && command == L"-Identifier")
             {
                 // We require at least 1 argument
-                CauldronAssert(ASSERT_CRITICAL,
-                               argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-',
-                               L"-Identifier requires a input to be provided (usage: -Identifier <input>");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
                 m_Config.HackOptions.identifier = WStringToString(pArgList[currentArg + 1]);
                 currentArg += 1;
                 continue;
@@ -1694,16 +1701,26 @@ namespace cauldron
 
             if (hackMode && command == L"-DisplayResolution")
             {
-                // We require at least 1 argument
-                CauldronAssert(ASSERT_CRITICAL,
-                               argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-',
-                               L"-DisplayResolution requires a input to be provided (usage: -DisplayResolution <1 or 2 or 4>");
-                int resOption = std::stoi(pArgList[currentArg + 1]);
-                CauldronAssert(ASSERT_ERROR, resOption == 1 || resOption == 2 || resOption == 4, 
-                               L"usage: -DisplayResolution <1 or 2 or 4>, got %d", resOption);
-                m_Config.HackOptions.displayResolution = static_cast<HackOptionDef::HackDisplayResolution>(resOption);
+                // TODO: support both resolution pair and alias.
+                bool isAlias = false;
+                // Is it an alias (ofc we don't accept 1~4 as Width)? Manual check b/c shouldn't throw
+                if (argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-') {
+                    uint32_t resOption = std::stoul(pArgList[currentArg + 1]);
+                    
+                    auto it = AliasResolutionMap.find(resOption);
+                    if (it != AliasResolutionMap.end()) {
+                        isAlias = true;
+                        std::tie(m_Config.Width, m_Config.Height) = it->second;
+                    }
+                }
 
-                currentArg += 1;
+                // If not alias form, treat normally as 2 values
+                if (!isAlias) {
+                    CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 2 && ValidateArgValueCount(&pArgList[currentArg], 2), L"");
+                    m_Config.Width  = std::stoul(pArgList[currentArg + 1]);
+                    m_Config.Height = std::stoul(pArgList[currentArg + 2]);
+                }
+                currentArg += isAlias ? 1 : 2;
                 continue;
             }
 
@@ -1716,10 +1733,10 @@ namespace cauldron
             if (hackMode && command == L"-HackPaths")
             {
                 // We require at least 1 argument
-                CauldronAssert(ASSERT_CRITICAL,
-                               argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-',
-                               L"-HackPaths requires a input to be provided (usage: -HackPaths <input>");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
 
+                // Ensure cmdline overwrites whatever set by json config
+                m_Config.HackOptions.hackPaths.clear();
                 m_Config.HackOptions.hackPaths.push_back(pArgList[currentArg + 1]);
                 /// we need 3 entries of 2 subfolders:
                 auto parentPath = std::filesystem::path(m_Config.HackOptions.hackPaths.front()).parent_path();
@@ -1742,15 +1759,8 @@ namespace cauldron
             if (hackMode && command == L"-OutputMaxCount")
             {
                 // We require at least 1 argument
-                CauldronAssert(ASSERT_CRITICAL,
-                               argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-',
-                               L"-OutputMaxCount requires a input to be provided (usage: -OutputMaxCount <input>");
-
-                // cap outputMaxCount to frameCount (capture all output)
-                m_Config.HackOptions.outputMaxCount = std::min(
-                    std::stoull(pArgList[currentArg + 1]),  // size_t is u long long
-                    m_Config.HackOptions.frameCount);
-
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
+                m_Config.HackOptions.outputMaxCount = std::stoull(pArgList[currentArg + 1]);  // size_t is u long long
                 currentArg += 1;
                 continue;
             }
@@ -1758,14 +1768,29 @@ namespace cauldron
             if (hackMode && command == L"-OutputPath")
             {
                 // We require at least 1 argument
-                CauldronAssert(ASSERT_CRITICAL,
-                               argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-',
-                               L"-OutputPath requires a input to be provided (usage: -OutputPath <input>");
+                CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
                 m_Config.HackOptions.outPath = pArgList[currentArg + 1];
                 currentArg += 1;
                 continue;
             }
         }
+
+        // First, we make do a sanity check: exr file numbers should match
+        auto count_exr_files = [](const std::filesystem::path& folderPath) {
+            return std::count_if(std::filesystem::directory_iterator(folderPath), std::filesystem::directory_iterator{}, [](const auto& entry) {
+                return entry.path().extension() == ".exr";
+            });
+        };
+        const auto colorCount = count_exr_files(std::filesystem::path(m_Config.HackOptions.hackPaths.front()));
+        const auto MVDCount   = count_exr_files(std::filesystem::path(m_Config.HackOptions.hackPaths.back()));
+        CauldronAssert(ASSERT_ERROR, colorCount == MVDCount, L"frame color count and MVD count should match, but got %d and %d", colorCount, MVDCount);
+
+        // then set 2 counters:
+        // outputMaxCount = frameCount (capture all output) if it's not set OR it's larger than frameCount
+        m_Config.HackOptions.frameCount = static_cast<size_t>(colorCount);
+        CauldronAssert(ASSERT_WARNING, m_Config.HackOptions.frameCount != 0, L"Found 0 input exr image");
+        if (m_Config.HackOptions.outputMaxCount == 0 || m_Config.HackOptions.outputMaxCount > m_Config.HackOptions.frameCount)
+            m_Config.HackOptions.outputMaxCount = m_Config.HackOptions.frameCount;
 
         // Pass on the command line string to the sample in the event they are overriding our parsing
         ParseSampleCmdLine(cmdLine);

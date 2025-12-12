@@ -47,6 +47,8 @@
 #include "render/vk/swapchain_vk.h"
 #endif  // FFX_API_DX12
 
+#include "magic_enum/magic_enum_all.hpp"
+
 #include <filesystem>
 #include <directx/d3dx12_core.h>
 
@@ -243,6 +245,23 @@ bool FSRRenderModule::LoadHackTextures()
     }  // end of all textures of one type
 
     //CheckHackColors("AfterLoad");
+
+    // Ensure all exr inputs have same resolution and force write
+    const auto& allSeenResolution = EXRTextureDataBlock::AllSeenResolution;
+    if (allSeenResolution.size() != 1)
+    {
+        // log then abort
+        CauldronWarning(L"Input data don't have consistent resolution");
+        for (const auto& [res, pathStr] : allSeenResolution)
+        {
+            CauldronWarning(L"%s: [%d, %d]", pathStr.c_str(), res.first, res.second);
+        }
+        CauldronError(L"FSRRenderModule::LoadHackTextures() ABORT");
+    }
+    const auto& [w, h] = allSeenResolution.begin()->first;
+    auto& resInfo      = const_cast<ResolutionInfo&>(GetFramework()->GetResolutionInfo());
+    resInfo.RenderWidth  = w;
+    resInfo.RenderHeight = h;
 
     return true;
 }
@@ -511,20 +530,17 @@ void FSRRenderModule::Init(const json& initData)
     //////////////////////////////////////////////////////////////////////////
     // Finish up init
 
-    /// TODO: set m_ScalePreset to Custom
+    /// So far under hack mode, display res has been set by cmdline/json parser.
+    /// First set Custom mode in order to freely set m_UpscaleRatio (to be display/render resolution).
+    /// Then load hack textures. This func sets render res.
+    /// Finally, SwitchUpscaler() will compute m_UpscaleRatio as we want.
     if (hackOptions.enableHack)
+    {
         m_ScalePreset = FSRScalePreset::Custom;
+        CauldronAssert(ASSERT_CRITICAL, LoadHackTextures(), L"Loading hack textures failed");
+    }
 
     SwitchUpscaler(m_UiUpscaleMethod);
-
-    /// We load the hacking textures in the very end, because it needs render resolution to be updated
-    /// different from display resolution. This is done AFTER:
-    /// - setting m_pUpdateFunc (see above);
-    /// - calling SwitchUpscaler, which ultimately calls m_pUpdateFunc to change GetFramework()->GetResolutionInfo()
-    ///     and Framework::ResizeEvent() to actually rezie render targets
-    if (hackOptions.enableHack)
-        CauldronAssert(ASSERT_CRITICAL, LoadHackTextures(), L"Loading hack textures failed");
-
 
     // That's all we need for now
     SetModuleReady(true);
@@ -940,6 +956,10 @@ bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, cons
         else
             return "WRONG";
     }();
+    if (skipN != m_kSkipFramesInput) {
+        // append mode tag
+        suffix += hackOptions.modeString;
+    }
 
     size_t outputCount = hackOptions.enableHack ? hackOptions.outputMaxCount : 15;
     
@@ -1365,10 +1385,23 @@ void FSRRenderModule::UpdatePreset(const int32_t* pOldPreset)
         m_UpscaleRatio = 3.0f;
         break;
     case FSRScalePreset::Custom:
-        // TODO: if hack mode, compute m_UpscaleRatio to be display / render
         if (hackOptions.enableHack)
         {
-            m_UpscaleRatio  = GetFramework()->GetResolutionInfo().GetDisplayWidthScaleRatio();
+            const auto& resInfo = GetFramework()->GetResolutionInfo();
+            /// Guard of inconsistent aspect ratio: expand render res instead of crop
+            /// E.g. 480x360 upscale to 960x540, (4:3 to 16:9), we want to set render res to 640x360
+            /// instead of 480x270
+            m_UpscaleRatio = std::min(resInfo.GetDisplayWidthScaleRatio(), resInfo.GetDisplayHeightScaleRatio());
+            CauldronAssert(ASSERT_CRITICAL,
+                           m_UpscaleRatio >= 1.f,
+                           L"display (%d, %d) can't be smaller than render (%d, %d)",
+                           resInfo.DisplayWidth,
+                           resInfo.DisplayHeight,
+                           resInfo.RenderWidth,
+                           resInfo.RenderHeight);
+            // With upscale ratio, we set the "fake tag" to be the preset with ratio closest to our ratio
+            auto preset = FindMatchingPreset();
+            const_cast<std::string&>(hackOptions.modeString) = std::string(magic_enum::enum_name(preset));
             break;
         }
     default:

@@ -104,12 +104,6 @@ namespace cauldron
     {
         bool        enableHack = false;
         std::string identifier = "";
-        enum class HackDisplayResolution
-        {
-            DR_1K = 1,
-            DR_2K = 2,
-            DR_4K = 4
-        } displayResolution                      = HackDisplayResolution::DR_1K;
         bool                      parseJitter    = false;
         std::vector<std::wstring> hackPaths      = {};
         bool                      storeOutput    = false;
@@ -118,6 +112,14 @@ namespace cauldron
 
         // internal, should not be set directly. Set by counting exr files in hackPaths
         size_t frameCount = 0;
+        // INTERNAL, a "fake tag" of FSRScalePreset, since we always use Custom internally. 
+        std::string modeString;
+    };
+
+    static inline const std::map<uint32_t, std::pair<uint32_t, uint32_t>> AliasResolutionMap = {
+        { 1, {1920, 1080} },
+        { 2, {2560, 1440} }, 
+        { 4, {3840, 2160} },
     };
 
     /**
@@ -751,8 +753,8 @@ namespace cauldron
         std::wstring            m_ConfigFileName;
         std::wstring            m_CmdLine;
         std::wstring            m_CPUName = L"Not Set";
-        ResolutionInfo          m_ResolutionInfo            = {1920, 1080, 2560, 1440, 2560, 1440};
-        ResolutionInfo          m_BenchmarkResolutionInfo   = {1920, 1080, 2560, 1440, 2560, 1440};
+        ResolutionInfo          m_ResolutionInfo            = {1280, 720, 2560, 1440, 2560, 1440};
+        ResolutionInfo          m_BenchmarkResolutionInfo   = {1280, 720, 2560, 1440, 2560, 1440};
         UpscalerState           m_UpscalingState = UpscalerState::None;
         ResolutionUpdateFunc    m_ResolutionUpdaterFn = nullptr;
         bool                    m_UpscalerEnabled = false;

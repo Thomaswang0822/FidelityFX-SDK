@@ -160,7 +160,12 @@ public:
 
 private:
 
-    enum class FSRScalePreset
+    /**
+     * Unlike DLSS mode, which is deeply entangled with the entire pipeline,
+     * FSRScalePreset here is merely used to determine m_UpscaleRatio.
+     * (m_MipBias only uses the ratio of FSRScalePreset).
+     */
+    enum class FSRScalePreset : uint32_t
     {
         NativeAA = 0,       // 1.0f
         Quality,            // 1.5f
@@ -169,6 +174,28 @@ private:
         UltraPerformance,   // 3.f
         Custom              // 1.f - 3.f range
     };
+
+    static constexpr inline std::array<std::pair<FSRScalePreset, float>, 5> k_PresetRatioList = {
+        std::make_pair(FSRScalePreset::NativeAA,         1.0f),
+        std::make_pair(FSRScalePreset::Quality,          1.5f),
+        std::make_pair(FSRScalePreset::Balanced,         1.7f),
+        std::make_pair(FSRScalePreset::Performance,      2.0f),
+        std::make_pair(FSRScalePreset::UltraPerformance, 3.0f),
+    };
+
+    /**
+     * \return The FSRScalePreset whose ratio is closest to m_UpscaleRatio
+     */
+    inline FSRScalePreset FindMatchingPreset() const
+    {
+        auto it = std::min_element(k_PresetRatioList.begin(), k_PresetRatioList.end(), [this](const auto& lhs, const auto& rhs) {
+            const auto& [preset1, ratio1] = lhs;
+            const auto& [preset2, ratio2] = rhs;
+            return std::abs(ratio1 - m_UpscaleRatio) < std::abs(ratio2 - m_UpscaleRatio);
+        });
+
+        return it->first;
+    }
 
     enum class FSRMaskMode
     {
