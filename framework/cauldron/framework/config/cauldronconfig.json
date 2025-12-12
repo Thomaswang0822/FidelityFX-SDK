@@ -95,8 +95,8 @@
 
         "HackOptions": {
             "EnableHack": true,
-            "Identifier": "Generated",
-            "DisplayResolution": 4,
+            "Identifier": "NPP_beauty",
+            "DisplayResolution": 2,
             "ParseJitter": true,
             "HackPaths": "../media/EmptySanityCheck/Horizontal/NPP_JI_selection",
             "StoreOutput": true,

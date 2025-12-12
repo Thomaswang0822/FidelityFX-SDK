@@ -950,15 +950,16 @@ bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, cons
         if (skipN == m_kSkipFramesInput)
             return "input";
         else if (skipN == m_kSkipFramesSR)
-            return "sr";
+            return "";  // to ensure SR output comes before FG output in filesystem.
         else if (skipN == m_kSkipFramesFG)
             return "fg";
         else
             return "WRONG";
     }();
-    if (skipN != m_kSkipFramesInput) {
-        // append mode tag
-        suffix += hackOptions.modeString;
+    if (skipN != m_kSkipFramesInput)
+    {
+        // prepend mode tag
+        suffix = hackOptions.modeString + suffix;
     }
 
     size_t outputCount = hackOptions.enableHack ? hackOptions.opFrameCount : 15;
@@ -974,11 +975,11 @@ bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, cons
         StringToWString(customName).c_str(), debugResource.resource, &textureDesc, resourceState);
     
     std::filesystem::path outputPath(hackOptions.outPath != L"" ? hackOptions.outPath : L"../media/TEST_SCENE/outputs");
-    // construct the full filename as <output_dir>/<identifier>_<frame_id formatted to 3 digits>.exr
+    // construct the full filename as <output_dir>/<identifier>_<frame_id formatted to 4 digits>_<suffix>.exr
     std::string idString = std::to_string(frameID);
     std::string filename = 
         (customName == "" ? hackOptions.identifier : customName) + "_" + 
-        std::string(3 - idString.length(), '0') + idString + suffix + ".exr";
+        std::string(4 - idString.length(), '0') + idString + "_" + suffix + ".exr";
     outputPath.append(filename);
     // Adapted from SwapChain::DumpAllToFile()
     {
@@ -2065,12 +2066,12 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         ffx::ReturnCode retCode = ffx::Dispatch(m_UpscalingContext, dispatchUpscale);
         CauldronAssert(ASSERT_CRITICAL, !!retCode, L"Dispatching FSR upscaling failed: %d", (uint32_t)retCode);
     
-        // After SR but before FG, we can look at SR output.
-        if (false) // manually turn on/off
+        // Shall we export both SR and FG frames or only FG?
+        if (hackOptions.storeOutput)
         {
             //bool exportSuccess = ExportDebugFrame(dispatchUpscale.motionVectors, m_kSkipFramesInput, "OriginalMV");
-            bool exportSuccess = ExportDebugFrame(dispatchUpscale.output, m_kSkipFramesSR, "SR_Outputs");
-            CauldronAssert(ASSERT_ERROR, exportSuccess, L"export MV and Depth failed");
+            bool exportSuccess = ExportDebugFrame(dispatchUpscale.output, m_kSkipFramesSR);
+            CauldronAssert(ASSERT_ERROR, exportSuccess, L"export SR frames failed");
         }
     }
 
@@ -2273,6 +2274,7 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         {
             // frameID check is done in export function
             bool exportSuccess = ExportDebugFrame(dispatchFg.outputs[0], m_kSkipFramesFG);
+            CauldronAssert(ASSERT_ERROR, exportSuccess, L"export FG frames failed");
         }
 
         // Other than saving FG frames, we can look at any resources used by FG, see SRV_debug at top of the file.
