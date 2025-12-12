@@ -100,6 +100,26 @@ namespace cauldron
         json            InitOptions;    ///< Initialization options from json to configure the module at init time
     };
 
+    struct HackOptionDef
+    {
+        bool        enableHack = false;
+        std::string identifier = "";
+        enum class HackDisplayResolution
+        {
+            DR_1K = 1,
+            DR_2K = 2,
+            DR_4K = 4
+        } displayResolution                      = HackDisplayResolution::DR_1K;
+        bool                      parseJitter    = false;
+        std::vector<std::wstring> hackPaths      = {};
+        bool                      storeOutput    = false;
+        size_t                    outputMaxCount = 0;
+        std::wstring              outPath        = L"";
+
+        // internal, should not be set directly. Set by counting exr files in hackPaths
+        size_t frameCount = 0;
+    };
+
     /**
      * @struct CauldronConfig
      *
@@ -218,25 +238,7 @@ namespace cauldron
 
         } StartupContent;
 
-        struct HackOptionDef
-        {
-            bool                      enableHack        = false;
-            std::string               identifier        = "";
-            enum class HackDisplayResolution
-            {
-                DR_1K = 1,
-                DR_2K = 2,
-                DR_4K = 4
-            } displayResolution                        = HackDisplayResolution::DR_1K;
-            bool                      parseJitter      = false;
-            std::vector<std::wstring> hackPaths        = {};
-            bool                      storeOutput      = false;
-            size_t                    outputMaxCount   = 0;
-            std::wstring              outPath          = L"";
-
-            // internal, should not be set directly. Set by counting exr files in hackPaths
-            size_t frameCount = 0;
-        } HackOptions;
+        HackOptionDef                 HackOptions;
 
         // Perf Output
         uint32_t                      BenchmarkFrameDuration = -1;

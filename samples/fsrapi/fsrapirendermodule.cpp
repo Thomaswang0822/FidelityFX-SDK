@@ -152,7 +152,6 @@ void RestoreApplicationSwapChain(bool recreateSwapchain = true);
 bool FSRRenderModule::LoadHackTextures()
 {
     // first do a sanity check on those paths in HackOptions
-    const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
     for (const auto& inPath : hackOptions.hackPaths)
     {
         CauldronAssert(ASSERT_ERROR, fs::exists(inPath), 
@@ -166,7 +165,7 @@ bool FSRRenderModule::LoadHackTextures()
         fs::create_directory(hackOptions.outPath);
     }
 
-    std::vector<std::wstring>       textureLoadPaths  = GetFramework()->GetConfig()->HackOptions.hackPaths;
+    std::vector<std::wstring>       textureLoadPaths  = hackOptions.hackPaths;
     const std::vector<std::wstring> renderTargetNames = {L"CurrFrameHack", L"MvHack", L"DepthHack"};
     // temporarily used
     std::vector<std::vector<cauldron::Texture*>*> hackTargets = {&m_pHackColors, &m_pHackMVs, &m_pHackDepths};
@@ -196,7 +195,7 @@ bool FSRRenderModule::LoadHackTextures()
         auto type = static_cast<EXRTextureDataBlock::SpecialChannelType>(typeIdx);
 
         // grab all exr files of current input type, parse jitter if reading ColorRGB
-        bool parseJitter = GetFramework()->GetConfig()->HackOptions.parseJitter && 
+        bool parseJitter = hackOptions.parseJitter && 
                            type == EXRTextureDataBlock::SpecialChannelType::ColorRGB;
 
         nTextures        = populatePathList(textureLoadPaths[typeIdx], exrFiles);
@@ -512,30 +511,9 @@ void FSRRenderModule::Init(const json& initData)
     //////////////////////////////////////////////////////////////////////////
     // Finish up init
 
-    /// Hacked upscale ratio needs to be set before the SwitchUpscaler() call below
-    if (GetFramework()->GetConfig()->HackOptions.enableHack)
-    {
-        switch (GetFramework()->GetConfig()->HackOptions.displayResolution)
-        {
-        case CauldronConfig::HackOptionDef::HackDisplayResolution::DR_1K:
-            m_CurScale    = FSRScalePreset::NativeAA;
-            m_ScalePreset = FSRScalePreset::NativeAA;
-            break;
-        case CauldronConfig::HackOptionDef::HackDisplayResolution::DR_2K:
-            m_CurScale    = FSRScalePreset::Quality;
-            m_ScalePreset = FSRScalePreset::Quality;
-            break;
-        case CauldronConfig::HackOptionDef::HackDisplayResolution::DR_4K:
-            m_CurScale    = FSRScalePreset::Performance;
-            m_ScalePreset = FSRScalePreset::Performance;
-            break;
-        default:
-            break;
-        }
-    }
-
     /// TODO: set m_ScalePreset to Custom
-    m_ScalePreset = FSRScalePreset::Custom;
+    if (hackOptions.enableHack)
+        m_ScalePreset = FSRScalePreset::Custom;
 
     SwitchUpscaler(m_UiUpscaleMethod);
 
@@ -544,7 +522,7 @@ void FSRRenderModule::Init(const json& initData)
     /// - setting m_pUpdateFunc (see above);
     /// - calling SwitchUpscaler, which ultimately calls m_pUpdateFunc to change GetFramework()->GetResolutionInfo()
     ///     and Framework::ResizeEvent() to actually rezie render targets
-    if (GetFramework()->GetConfig()->HackOptions.enableHack)
+    if (hackOptions.enableHack)
         CauldronAssert(ASSERT_CRITICAL, LoadHackTextures(), L"Loading hack textures failed");
 
 
@@ -940,7 +918,6 @@ void FSRRenderModule::InitUI(UISection* pUISection)
 
 bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, const size_t skipN, std::string customName)
 {
-    const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
     size_t      frameID     = m_FrameID;
 
     /// When calling at the end of Execute(), we skip frames to align with actual displayed frame.
@@ -1084,7 +1061,6 @@ bool FSRRenderModule::ExportDebugFrame2Inputs(
     const size_t skipN, 
     std::string customName)
 {
-    const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
     size_t      frameID     = GetFramework()->GetFrameID();
 
     /// When calling at the end of Execute(), we skip frames to align with actual displayed frame.
@@ -1390,7 +1366,7 @@ void FSRRenderModule::UpdatePreset(const int32_t* pOldPreset)
         break;
     case FSRScalePreset::Custom:
         // TODO: if hack mode, compute m_UpscaleRatio to be display / render
-        if (GetFramework()->GetConfig()->HackOptions.enableHack)
+        if (hackOptions.enableHack)
         {
             m_UpscaleRatio  = GetFramework()->GetResolutionInfo().GetDisplayWidthScaleRatio();
             break;
@@ -1875,7 +1851,7 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
     const auto& tempDesc  = m_pTempTexture->GetDesc();
     const auto& mvDesc    = m_pMotionVectors->GetDesc();
     const auto& depthDesc = m_pDepthTarget->GetDesc();
-    if (GetFramework()->GetConfig()->HackOptions.enableHack)
+    if (hackOptions.enableHack)
     {
         const auto& hackColorDesc = m_pHackColors[0]->GetDesc();
         const auto& hackMVDesc    = m_pHackMVs[0]->GetDesc();
@@ -1912,14 +1888,13 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
     // If they become changeable at runtime, we'll need to modify how this information is queried
     static bool s_InvertedDepth = GetConfig()->InvertedDepth;
 
-    const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
-    // use this to temporarily define export-related varaibles when hack is off but you want export.
+    // use this to temporarily define export-related variables when hack is off but you want export.
     if (!hackOptions.enableHack)
     {
-        const_cast<CauldronConfig::HackOptionDef&>(hackOptions).storeOutput    = false;
-        const_cast<CauldronConfig::HackOptionDef&>(hackOptions).outputMaxCount = 15;
-        const_cast<CauldronConfig::HackOptionDef&>(hackOptions).identifier     = "DefaultSceneBB";
-        const_cast<CauldronConfig::HackOptionDef&>(hackOptions).outPath        = L"../media/EmptySanityCheck/Horizontal/outputs";
+        const_cast<HackOptionDef&>(hackOptions).storeOutput    = false;
+        const_cast<HackOptionDef&>(hackOptions).outputMaxCount = 15;
+        const_cast<HackOptionDef&>(hackOptions).identifier     = "DefaultSceneBB";
+        const_cast<HackOptionDef&>(hackOptions).outPath        = L"../media/EmptySanityCheck/Horizontal/outputs";
     }
     uint64_t hackIdx = 0;
     if (hackOptions.enableHack)

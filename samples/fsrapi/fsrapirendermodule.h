@@ -57,7 +57,8 @@ class FSRRenderModule : public cauldron::RenderModule
 
 public:
     FSRRenderModule()
-        : RenderModule(L"FSRApiRenderModule"),
+        : RenderModule(L"FSRApiRenderModule"), 
+          hackOptions(cauldron::GetFramework()->GetConfig()->HackOptions),
           m_SafetyMarginInMs(0.1f),
           m_VarianceFactor (0.1f),
           m_AllowHybridSpin (false),
@@ -214,7 +215,7 @@ private:
     FSRScalePreset  m_CurScale        = FSRScalePreset::Custom;
     // The actual value used by app
     FSRScalePreset  m_ScalePreset     = FSRScalePreset::Custom;
-    // Determined by m_ScalePreset
+    // Determined by m_ScalePreset in UpdatePreset()
     float           m_UpscaleRatio    = 2.f;
     float           m_LetterboxRatio  = 1.f;
     float           m_MipBias         = cMipBias[static_cast<uint32_t>(FSRScalePreset::NativeAA)];
@@ -281,6 +282,9 @@ private:
     const cauldron::Texture*  m_pReactiveMask          = nullptr;
     const cauldron::Texture*  m_pCompositionMask       = nullptr;
     const cauldron::Texture*  m_pOpaqueTexture         = nullptr;
+
+    // Reference to the HackOptions stored in Framework, init in constructor
+    const cauldron::HackOptionDef& hackOptions;
     // and our hacking data: input {frame_t_color, motion vectors, depth} textures
     std::vector<cauldron::Texture*> m_pHackColors = {};
     std::vector<cauldron::Texture*> m_pHackMVs    = {};

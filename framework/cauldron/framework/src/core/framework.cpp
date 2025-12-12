@@ -1119,7 +1119,7 @@ namespace cauldron
         {
             uint32_t resOption = hackOptions.value<uint32_t>("DisplayResolution", 1);
             CauldronAssert(ASSERT_ERROR, resOption == 1 || resOption == 2 || resOption == 4, L"Render Resolution option must be <1 or 2 or 4>, got %d", resOption);
-            m_Config.HackOptions.displayResolution = static_cast<CauldronConfig::HackOptionDef::HackDisplayResolution>(resOption);
+            m_Config.HackOptions.displayResolution = static_cast<HackOptionDef::HackDisplayResolution>(resOption);
         
             if (resOption == 1) {
                 m_Config.Width = 1920;
@@ -1675,7 +1675,7 @@ namespace cauldron
             if (command == L"-EnableHack")
             {
                 // we reset HackOptions otherwise bool fields can't be overwritten to false
-                m_Config.HackOptions            = CauldronConfig::HackOptionDef{};
+                m_Config.HackOptions            = HackOptionDef{};
                 hackMode = true;
                 m_Config.HackOptions.enableHack = true;
                 continue;
@@ -1701,7 +1701,7 @@ namespace cauldron
                 int resOption = std::stoi(pArgList[currentArg + 1]);
                 CauldronAssert(ASSERT_ERROR, resOption == 1 || resOption == 2 || resOption == 4, 
                                L"usage: -DisplayResolution <1 or 2 or 4>, got %d", resOption);
-                m_Config.HackOptions.displayResolution = static_cast<CauldronConfig::HackOptionDef::HackDisplayResolution>(resOption);
+                m_Config.HackOptions.displayResolution = static_cast<HackOptionDef::HackDisplayResolution>(resOption);
 
                 currentArg += 1;
                 continue;
