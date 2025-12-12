@@ -161,7 +161,7 @@ bool FSRRenderModule::LoadHackTextures()
     if (!fs::exists(hackOptions.outPath))
     {
         // Defensive, in case path doesn't exist
-        CauldronWarning(L"Sceenshot output dir DNE and will be created: %s", hackOptions.outPath.c_str());
+        CauldronWarning(L"Screenshot output dir DNE and will be created: %s", hackOptions.outPath.c_str());
         fs::create_directory(hackOptions.outPath);
     }
 
@@ -2374,7 +2374,7 @@ void RestoreApplicationSwapChain(bool recreateSwapchain)
     {
         cauldron::GetSwapChain()->GetImpl()->SetDXGISwapChain(nullptr);
 
-        // safe data since release will destroy the swapchain (and we need it distroyed before we can create the new one)
+        // safe data since release will destroy the swapchain (and we need it destroyed before we can create the new one)
         HWND windowHandle = pSwapchain->GetImpl()->DX12SwapChainDesc().OutputWindow;
         DXGI_SWAP_CHAIN_DESC1 desc1 = pSwapchain->GetImpl()->DX12SwapChainDesc1();
         DXGI_SWAP_CHAIN_FULLSCREEN_DESC  fsDesc = pSwapchain->GetImpl()->DX12SwapChainFullScreenDesc();
