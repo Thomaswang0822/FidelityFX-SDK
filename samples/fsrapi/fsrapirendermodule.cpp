@@ -207,9 +207,9 @@ bool FSRRenderModule::LoadHackTextures()
         if (parseJitter)
             EXRTextureDataBlock::ParseJitter(exrFiles, m_pHackJitterXY);
 
-        /// NOTE: hackOptions.frameCount is the fixed total number of frames to load,
-        /// but user can set a smaller hackOptions.outputMaxCount to check in test runs.
-        nTextures = hackOptions.outputMaxCount;
+        /// NOTE: hackOptions.frameCount is the fixed total number of frames in the testdata folder,
+        /// but user can set a smaller hackOptions.opFrameCount to check in test runs.
+        nTextures = hackOptions.opFrameCount;
         for (size_t frameIdx = 0; frameIdx < nTextures; ++frameIdx)
         {
             rtFullname = renderTargetNames[typeIdx] + L"_" + std::to_wstring(frameIdx);
@@ -961,7 +961,7 @@ bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, cons
         suffix += hackOptions.modeString;
     }
 
-    size_t outputCount = hackOptions.enableHack ? hackOptions.outputMaxCount : 15;
+    size_t outputCount = hackOptions.enableHack ? hackOptions.opFrameCount : 15;
     
     if (frameID < skipN + outputCount || frameID >= 2 * outputCount + skipN)
     //if (frameID >= outputCount)
@@ -1104,7 +1104,7 @@ bool FSRRenderModule::ExportDebugFrame2Inputs(
             return "WRONG";
     }();
 
-    size_t outputCount = hackOptions.enableHack ? hackOptions.outputMaxCount : 15;
+    size_t outputCount = hackOptions.enableHack ? hackOptions.opFrameCount : 15;
 
     if (frameID < skipN + outputCount || frameID >= 2 * outputCount + skipN)
         return true;
@@ -1925,7 +1925,7 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
     if (!hackOptions.enableHack)
     {
         const_cast<HackOptionDef&>(hackOptions).storeOutput    = false;
-        const_cast<HackOptionDef&>(hackOptions).outputMaxCount = 15;
+        const_cast<HackOptionDef&>(hackOptions).opFrameCount = 15;
         const_cast<HackOptionDef&>(hackOptions).identifier     = "DefaultSceneBB";
         const_cast<HackOptionDef&>(hackOptions).outPath        = L"../media/EmptySanityCheck/Horizontal/outputs";
     }

@@ -1170,11 +1170,11 @@ namespace cauldron
             L"frame color count and MVD count should match, but got %d and %d", colorCount, MVDCount);
         
         // then set 2 counters:
-        // outputMaxCount = frameCount (capture all output) if it's not set OR it's larger than frameCount
+        // opFrameCount = frameCount (capture all output) if it's not set OR it's larger than frameCount
         m_Config.HackOptions.frameCount = static_cast<size_t>(colorCount);
         CauldronAssert(ASSERT_WARNING, m_Config.HackOptions.frameCount != 0, L"Found 0 input exr image");
-        m_Config.HackOptions.outputMaxCount = std::min(
-            jsonHackOptions.value<size_t>("OutputMaxCount", m_Config.HackOptions.frameCount), 
+        m_Config.HackOptions.opFrameCount = std::min(
+            jsonHackOptions.value<size_t>("OptionalFrameCount", m_Config.HackOptions.frameCount), 
             m_Config.HackOptions.frameCount);
     }
 
@@ -1756,11 +1756,11 @@ namespace cauldron
             }
 
 
-            if (hackMode && command == L"-OutputMaxCount")
+            if (hackMode && command == L"-OptionalFrameCount")
             {
                 // We require at least 1 argument
                 CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
-                m_Config.HackOptions.outputMaxCount = std::stoull(pArgList[currentArg + 1]);  // size_t is u long long
+                m_Config.HackOptions.opFrameCount = std::stoull(pArgList[currentArg + 1]);  // size_t is u long long
                 currentArg += 1;
                 continue;
             }
@@ -1786,11 +1786,11 @@ namespace cauldron
         CauldronAssert(ASSERT_ERROR, colorCount == MVDCount, L"frame color count and MVD count should match, but got %d and %d", colorCount, MVDCount);
 
         // then set 2 counters:
-        // outputMaxCount = frameCount (capture all output) if it's not set OR it's larger than frameCount
+        // opFrameCount = frameCount (capture all output) if it's not set OR it's larger than frameCount
         m_Config.HackOptions.frameCount = static_cast<size_t>(colorCount);
         CauldronAssert(ASSERT_WARNING, m_Config.HackOptions.frameCount != 0, L"Found 0 input exr image");
-        if (m_Config.HackOptions.outputMaxCount == 0 || m_Config.HackOptions.outputMaxCount > m_Config.HackOptions.frameCount)
-            m_Config.HackOptions.outputMaxCount = m_Config.HackOptions.frameCount;
+        if (m_Config.HackOptions.opFrameCount == 0 || m_Config.HackOptions.opFrameCount > m_Config.HackOptions.frameCount)
+            m_Config.HackOptions.opFrameCount = m_Config.HackOptions.frameCount;
 
         // Pass on the command line string to the sample in the event they are overriding our parsing
         ParseSampleCmdLine(cmdLine);

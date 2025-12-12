@@ -107,7 +107,8 @@ namespace cauldron
         bool                      parseJitter    = false;
         std::vector<std::wstring> hackPaths      = {};
         bool                      storeOutput    = false;
-        size_t                    outputMaxCount = 0;
+        /// [optional] Set to frameCount if not given. Allow running on a subset of inputs.
+        size_t                    opFrameCount = 0;
         std::wstring              outPath        = L"";
 
         // internal, should not be set directly. Set by counting exr files in hackPaths

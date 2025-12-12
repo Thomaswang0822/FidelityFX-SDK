@@ -100,7 +100,6 @@
             "ParseJitter": true,
             "HackPaths": "../media/EmptySanityCheck/Horizontal/NPP_JI_selection",
             "StoreOutput": true,
-            "OutputMaxCount": 15,
             "OutputPath": "../media/EmptySanityCheck/Horizontal/outputs"
         }
     }

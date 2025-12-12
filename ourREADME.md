@@ -50,7 +50,7 @@ We have the following options:
 - ParseJitter: whether to parse and use the jitter data from input filenames, default false. Currently we only have it in 1K inputs, so it will be forced to false it render resolution is not 1K.
 - HackPaths: **a single folder relative path** to the input frame capture folder, default *"../media/TEST_SCENE/NPP_JI"*. The path to the encoded MVs and Depths will be constructed automatically by replacing "NPP_JI" to "MVD_JI".
 - StoreOutput: whether to export FG frames to .exr files, default false.
-- [Optional] OutputMaxCount: number of frames to load and run on, default 0. When not given or the given value is larger than number of input frames, default to capture all frames.
+- [Optional] OptionalFrameCount: number of frames to load and run on. When not given or the given value is larger than number of input frames, default to capture all frames.
 - OutputPath: **a single folder relative path** to the output screenshots folder, like *"../media/TEST_SCENE/outputs"*
 
 Cmdline parsing of those hack-related runtime options is also provided. It would become useful when you have multiple launches of different scenes, (otherwise you likely need to change the input and output paths in the config file for each scene.)
