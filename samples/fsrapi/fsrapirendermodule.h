@@ -122,6 +122,25 @@ public:
 
     void UpdateExportInfo(cauldron::ExportInfo& info);
 
+    /**
+     * Except setting m_UpscaleMethod to input method, 
+     * it modifies m_CurScale, m_IsNonNative, and m_ScalePreset:
+     * 
+     * method == 0: turn off FFXAPI; always set m_ScalePreset = NativeAA. 
+     * In addition, if originally m_IsNonNative
+     * **** is false (FFXAPI currently also off), nothing else happens.
+     * **** is true, m_CurScale = <original> m_ScalePreset, m_IsNonNative turned to false,
+     *   
+     * 
+     * 
+     * method == 1: turn on FFXAPI; always set m_IsNonNative = true, m_ScalePreset = m_CurScale (original value)
+     * In addition, if originally m_IsNonNative
+     * **** is false (FFXAPI currently off), nothing else happens.
+     * **** is true, (m_CurScale = m_ScalePreset) then (m_ScalePreset = m_CurScale), so m_ScalePreset never changes
+     * 
+     * 
+     * \param method: 0 = native (FFXAPI off), 1 = FFXAPI
+     */
     void SetFilter(int32_t method)
     {
         m_UpscaleMethod = method;
@@ -132,6 +151,10 @@ public:
 
         m_ScalePreset = m_IsNonNative ? m_CurScale : FSRScalePreset::NativeAA;
         UpdatePreset((int32_t*)&m_ScalePreset);
+    }
+
+    inline std::pair<uint32_t, uint32_t> GetDisplayResolution() {
+        return cauldron::GetFramework()->GetResolutionInfo().DisplayResolution();
     }
 
 private:
@@ -187,9 +210,11 @@ private:
 
     int32_t         m_UpscaleMethod   = Upscaler_FSRAPI;
     int32_t         m_UiUpscaleMethod = Upscaler_FSRAPI;
-    // The following 3 values are overwritten by config file or cmdline args
-    FSRScalePreset  m_CurScale        = FSRScalePreset::Performance;
-    FSRScalePreset  m_ScalePreset     = FSRScalePreset::Performance;
+    // ONLY used in SetFilter() as a temp value
+    FSRScalePreset  m_CurScale        = FSRScalePreset::Custom;
+    // The actual value used by app
+    FSRScalePreset  m_ScalePreset     = FSRScalePreset::Custom;
+    // Determined by m_ScalePreset
     float           m_UpscaleRatio    = 2.f;
     float           m_LetterboxRatio  = 1.f;
     float           m_MipBias         = cMipBias[static_cast<uint32_t>(FSRScalePreset::NativeAA)];

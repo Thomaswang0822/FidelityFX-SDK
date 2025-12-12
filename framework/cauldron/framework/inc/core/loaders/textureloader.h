@@ -226,10 +226,8 @@ namespace cauldron
         };
 
 
-        EXRTextureDataBlock(float scaleFactor = 1.0f)
-            : TextureDataBlock()
-            , m_UpscaleRatio(scaleFactor)
-        {}
+        EXRTextureDataBlock()
+            : TextureDataBlock() {};
         virtual ~EXRTextureDataBlock();
 
         virtual bool LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
@@ -257,16 +255,7 @@ namespace cauldron
          * RGBA8_UNORM, RGB10A2_UNORM, or RGBA16_FLOAT.
          * 
          */
-        void SetResourceFormat(ResourceFormat format) { 
-            m_Format = format; 
-        }
-
-        /**
-         * @brief Creates a debug texture with four distinct regions for coordinate verification
-         * 
-         * @param texDesc Texture description to populate
-         */
-        bool CreateDebugCoordinateTexture(TextureDesc& texDesc);
+        void SetResourceFormat(ResourceFormat format) { m_Format = format; }
 
         /**
          * @brief Given a list of all exr file paths, extract jitter from filename and store to output vector
@@ -281,15 +270,9 @@ namespace cauldron
 
 
     private:
-        std::wstring textureName   = L"uninitialized";
         char*  m_pData    = nullptr;  // EXR uses float*, but it will cause error
-        int    m_Width    = 0;
-        int    m_Height   = 0;
-        int    m_Channels = 0;
-        // depending on display mode LDR or HDR, see setter
+        // Necessary because we supports 3 formats, must be known before LoadTextureData()
         ResourceFormat m_Format = ResourceFormat::Unknown;
-        uint32_t       m_BytesPerPixel = 4;
-        float          m_UpscaleRatio  = 1.0f;
     };
 
     /**

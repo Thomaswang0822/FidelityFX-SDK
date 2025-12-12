@@ -571,12 +571,6 @@ namespace cauldron
          */
         const ResolutionInfo& GetResolutionInfo() const { return m_ResolutionInfo; }
 
-        void UpdateRenderResolution(uint32_t renderWidth, uint32_t renderHeight)
-        {
-            m_ResolutionInfo.RenderWidth = renderWidth;
-            m_ResolutionInfo.RenderHeight = renderHeight;
-        }
-
         /**
          * @brief   Enables or disabled upscaling in the application.
          */
@@ -755,8 +749,8 @@ namespace cauldron
         std::wstring            m_ConfigFileName;
         std::wstring            m_CmdLine;
         std::wstring            m_CPUName = L"Not Set";
-        ResolutionInfo          m_ResolutionInfo            = {1920, 1080, 1920, 1080, 1920, 1080};
-        ResolutionInfo          m_BenchmarkResolutionInfo   = {1920, 1080, 1920, 1080, 1920, 1080};
+        ResolutionInfo          m_ResolutionInfo            = {1920, 1080, 2560, 1440, 2560, 1440};
+        ResolutionInfo          m_BenchmarkResolutionInfo   = {1920, 1080, 2560, 1440, 2560, 1440};
         UpscalerState           m_UpscalingState = UpscalerState::None;
         ResolutionUpdateFunc    m_ResolutionUpdaterFn = nullptr;
         bool                    m_UpscalerEnabled = false;

@@ -171,11 +171,6 @@ bool FSRRenderModule::LoadHackTextures()
     // temporarily used
     std::vector<std::vector<cauldron::Texture*>*> hackTargets = {&m_pHackColors, &m_pHackMVs, &m_pHackDepths};
 
-    CauldronAssert(
-        ASSERT_CRITICAL, m_CurScale != FSRScalePreset::Balanced && m_CurScale != FSRScalePreset::Custom, 
-        L"Cannot support 1.7x or custom scale ratio when EnableHack is on.");
-
-    const ResolutionInfo& resInfo = GetFramework()->GetResolutionInfo();
     std::vector<std::filesystem::path> exrFiles;
 
     size_t       nTextures;
@@ -220,7 +215,7 @@ bool FSRRenderModule::LoadHackTextures()
             TextureLoadInfo textureInfo(exrFiles[frameIdx]);
 
             // NOTE, m_UpscaleRatio is display res / render res, controlled by m_CurScale.
-            auto textureDB = std::make_unique<EXRTextureDataBlock>(m_UpscaleRatio);
+            auto textureDB = std::make_unique<EXRTextureDataBlock>();
             if (type == EXRTextureDataBlock::SpecialChannelType::ColorRGB)
             {
                 textureDB->SetResourceFormat(GetFramework()->GetSwapChain()->GetSwapChainFormat());
@@ -323,7 +318,9 @@ void FSRRenderModule::Init(const json& initData)
     m_RasterViews[1] = GetRasterViewAllocator()->RequestRasterView(m_pCompositionMask, ViewDimension::Texture2D);
 
     // Set our render resolution function as that to use during resize to get render width/height from display width/height
-    m_pUpdateFunc = [this](uint32_t displayWidth, uint32_t displayHeight) { return this->UpdateResolution(displayWidth, displayHeight); };
+    m_pUpdateFunc = 
+        
+        [this](uint32_t displayWidth, uint32_t displayHeight) { return this->UpdateResolution(displayWidth, displayHeight); };
 
     //////////////////////////////////////////////////////////////////////////
     // Register additional execution callbacks during the frame
@@ -536,6 +533,9 @@ void FSRRenderModule::Init(const json& initData)
             break;
         }
     }
+
+    /// TODO: set m_ScalePreset to Custom
+    m_ScalePreset = FSRScalePreset::Custom;
 
     SwitchUpscaler(m_UiUpscaleMethod);
 
@@ -1389,6 +1389,12 @@ void FSRRenderModule::UpdatePreset(const int32_t* pOldPreset)
         m_UpscaleRatio = 3.0f;
         break;
     case FSRScalePreset::Custom:
+        // TODO: if hack mode, compute m_UpscaleRatio to be display / render
+        if (GetFramework()->GetConfig()->HackOptions.enableHack)
+        {
+            m_UpscaleRatio  = GetFramework()->GetResolutionInfo().GetDisplayWidthScaleRatio();
+            break;
+        }
     default:
         // Leave the upscale ratio at whatever it was
         break;
@@ -1862,12 +1868,21 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
     FfxApiResource backbuffer            = SDKWrapper::ffxGetResourceApi(pSwapchainBackbuffer, FFX_API_RESOURCE_STATE_PRESENT);
     
     // copy input source to temp so that the input and output texture of the upscalers is different 
+    auto hasSameSize = [](const TextureDesc& desc1, const TextureDesc& desc2) {
+        return desc1.Width == desc2.Width && desc1.Height == desc2.Height;
+    };
     const auto& colorDesc = m_pColorTarget->GetDesc();
     const auto& tempDesc  = m_pTempTexture->GetDesc();
-    if (GetFramework()->GetConfig()->HackOptions.enableHack)
-        const auto& hackDesc  = m_pHackColors[0]->GetDesc();
     const auto& mvDesc    = m_pMotionVectors->GetDesc();
     const auto& depthDesc = m_pDepthTarget->GetDesc();
+    if (GetFramework()->GetConfig()->HackOptions.enableHack)
+    {
+        const auto& hackColorDesc = m_pHackColors[0]->GetDesc();
+        const auto& hackMVDesc    = m_pHackMVs[0]->GetDesc();
+        const auto& hackDepthDesc = m_pHackDepths[0]->GetDesc();
+        
+        bool check = hasSameSize(colorDesc, hackColorDesc) && hasSameSize(mvDesc, hackMVDesc) && hasSameSize(depthDesc, hackDepthDesc);
+    }
     {
         std::vector<Barrier> barriers;
         barriers.push_back(Barrier::Transition(

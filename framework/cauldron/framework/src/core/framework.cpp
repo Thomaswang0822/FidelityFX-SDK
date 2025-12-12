@@ -263,6 +263,8 @@ namespace cauldron
         // Set width and height accordingly to what's been specified in config/command line
         m_ResolutionInfo = {m_Config.Width, m_Config.Height, m_Config.Width, m_Config.Height, m_Config.Width, m_Config.Height};
 
+        m_ResolutionInfo = {1920, 1080, 2560, 1440, 2560, 1440};
+
         // Init RenderDoc
         if(m_Config.EnableRenderDocCapture)
         {

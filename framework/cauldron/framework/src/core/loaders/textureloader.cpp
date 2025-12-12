@@ -275,15 +275,15 @@ namespace cauldron
             // Figure fp16Data how to load this texture (whether it's a DDS or other)
             bool ddsFile = loadInfo.TextureFile.extension() == L".dds" || loadInfo.TextureFile.extension() == L".DDS";
             bool exrFile = loadInfo.TextureFile.extension() == L".exr" || loadInfo.TextureFile.extension() == L".EXR";
+            if (exrFile) {
+                CauldronError(L"Loading exr file %s as regular TextureContent is not supported.", loadInfo.TextureFile.wstring().c_str());
+            }
+            
             TextureDataBlock* pTextureData;
 
             if (ddsFile)
             {
                 pTextureData = new DDSTextureDataBlock();
-            }
-            else if (exrFile)
-            {
-                pTextureData = new EXRTextureDataBlock();
             }
             else
             {
@@ -533,7 +533,6 @@ namespace cauldron
         // Set texture format at the very beginning
         texDesc.Format = this->m_Format;
 
-        textureName          = textureFile.wstring();
         std::string fileName = textureFile.u8string();
 
         // Modern TinyEXR API
@@ -693,16 +692,15 @@ namespace cauldron
 
         /// Malloc byte array depending on format and upscale factor
         /// NOTE that we fix the render resolution to 1K, but may get input smaller than 1K.
-        m_BytesPerPixel     = (m_Format == ResourceFormat::RGBA16_FLOAT) ? 8 : 4;
-        const size_t outputWidth   = Width1K * m_UpscaleRatio;
-        const size_t outputHeight  = Height1K * m_UpscaleRatio;
-        char* finalCharData = static_cast<char*>(malloc(outputWidth * outputHeight * m_BytesPerPixel));
+        uint32_t bytesPerPixel     = (m_Format == ResourceFormat::RGBA16_FLOAT) ? 8 : 4;
+        const auto [mallocWidth, mallocHeight] = GetFramework()->GetResolutionInfo().DisplayResolution();
+        char* finalCharData = static_cast<char*>(malloc(mallocWidth * mallocHeight * bytesPerPixel));
         if (!finalCharData)
         {
            CauldronError(L"Failed to allocate memory for EXR texture data.");
             return false;
         }
-        std::memset(finalCharData, 0, outputWidth * outputHeight * m_BytesPerPixel);
+        std::memset(finalCharData, 0, mallocWidth * mallocHeight * bytesPerPixel);
 
         /// Texture should be stored "2D". 
         /// E.g. for 2x upscaling, the 1k texture will be stored in the top-left 0.5x0.5 area
@@ -722,7 +720,7 @@ namespace cauldron
                 for (size_t j = 0; j < image.width; ++j)
                 {
                     idxSrc = i * image.width + j;
-                    idxDst = i * outputWidth + j;  // only fill in the top-left area
+                    idxDst = i * mallocWidth + j;  // only fill in the top-left area
 
                     fp32Data[idxDst] = PackRGBA8(r[idxSrc], g[idxSrc], b[idxSrc], a ? a[idxSrc] : fp16_ONE);
                 }
@@ -744,7 +742,7 @@ namespace cauldron
                 for (size_t j = 0; j < image.width; ++j)
                 {
                     idxSrc = i * image.width + j;
-                    idxDst = i * outputWidth + j;  // only fill in the top-left area
+                    idxDst = i * mallocWidth + j;  // only fill in the top-left area
 
                     fp32Data[idxDst] = PackRGB10A2(r[idxSrc], g[idxSrc], b[idxSrc], a ? a[idxSrc] : fp16_ONE);
                 }
@@ -766,7 +764,7 @@ namespace cauldron
                 for (size_t j = 0; j < image.width; ++j)
                 {
                     idxSrc = i * image.width + j;
-                    idxDst = i * outputWidth + j;  // only fill in the top-left area
+                    idxDst = i * mallocWidth + j;  // only fill in the top-left area
 
                     fp16Data[4 * idxDst + 0] = r[idxSrc];
                     fp16Data[4 * idxDst + 1] = g[idxSrc];
@@ -785,18 +783,14 @@ namespace cauldron
         }
         }  // end of switch
 
-        // 7. Update texture data
-        m_Width  = image.width;
-        m_Height = image.height;
-
-        // Store to member char* in the end in order not to pollute memory.
+        // 7. Store to member char* in the end in order not to pollute memory.
         if (m_pData)
             free(m_pData);
         m_pData = finalCharData;
 
         // 8. Set texture description
-        texDesc.Width            = m_Width;
-        texDesc.Height           = m_Height;
+        texDesc.Width            = image.width;
+        texDesc.Height           = image.height;
         texDesc.MipLevels        = 1;
         texDesc.DepthOrArraySize = 1;
         texDesc.Dimension        = TextureDimension::Texture2D;
@@ -819,13 +813,13 @@ namespace cauldron
         if (channelType == SpecialChannelType::MotionVectors)
         {
             texDesc.Format  = ResourceFormat::RG16_FLOAT;
-            m_BytesPerPixel = 4;  // 2 channels × 2 bytes each
+            
         }
         else
         {  // Depth
             texDesc.Format  = ResourceFormat::R32_FLOAT;
-            m_BytesPerPixel = 4;  // 1 channel × 4 bytes
         }
+        uint32_t bytesPerPixel = 4;  // 2x2 or 1x4 (channels × bytes) for MV and Depth
 
         // Initialize EXR structures
         EXRVersion version;
@@ -910,11 +904,10 @@ namespace cauldron
         const size_t inputWidth  = static_cast<size_t>(image.width);
         const size_t inputHeight = static_cast<size_t>(image.height);
         CauldronAssert(ASSERT_ERROR, inputWidth == Width1K && inputHeight == Height1K, L"Jitter EXR input must be 1k resolution.");
-        const size_t outputWidth  = inputWidth * m_UpscaleRatio;
-        const size_t outputHeight   = inputHeight * m_UpscaleRatio;
 
         // Allocate raw bytes array first, then reinterpret_cast to FP16 or FP32
-        char* charData = static_cast<char*>(malloc(outputWidth * outputHeight * m_BytesPerPixel));
+        const auto [mallocWidth, mallocHeight] = GetFramework()->GetResolutionInfo().DisplayResolution();
+        char* charData = static_cast<char*>(malloc(mallocWidth * mallocHeight * bytesPerPixel));
         if (!charData)
         {
             CauldronError(L"Memory allocation failed for %ls", textureFile.c_str());
@@ -943,7 +936,7 @@ namespace cauldron
                 for (int x = 0; x < inputWidth; x++)
                 {
                     idxSrc = y * inputWidth + x;
-                    idxDst = (y * outputWidth + x) * 2;  // each mv stored as 2 fp16
+                    idxDst = (y * mallocWidth + x) * 2;  // each mv stored as 2 fp16
 
                     // ROOT cause of ghosting finally found: should scale by 0.5
                     fp16Data[idxDst]     = scaleMV(r[idxSrc], -0.5f);  // mv.X
@@ -960,7 +953,7 @@ namespace cauldron
                 {
                                     
                     idxSrc = y * inputWidth + x;
-                    idxDst = y * outputWidth + x;  // each depth stored as 1 fp32
+                    idxDst = y * mallocWidth + x;  // each depth stored as 1 fp32
 
                     // no interpolation needed
                     tinyexr::FP16 depth16 = {b[idxSrc]};
@@ -974,59 +967,12 @@ namespace cauldron
             free(m_pData);
         m_pData = charData;  // Store as char*
 
-        m_Width     = outputWidth * m_UpscaleRatio;
-        m_Height    = outputHeight * m_UpscaleRatio;
-        textureName = textureFile.wstring();
-
         // Fill texture description
-        texDesc.Width            = outputWidth;
-        texDesc.Height           = outputHeight;
+        texDesc.Width            = image.width;
+        texDesc.Height           = image.height;
         texDesc.MipLevels        = 1;
         texDesc.DepthOrArraySize = 1;
         texDesc.Dimension        = TextureDimension::Texture2D;
-
-        return true;
-    }
-
-    bool EXRTextureDataBlock::CreateDebugCoordinateTexture(TextureDesc& texDesc)
-    {
-        const int width  = 3840;
-        const int height = 2160;
-
-        // USE THE WORKING FORMAT - RGBA8_UNORM
-        texDesc.Format         = ResourceFormat::RGBA8_UNORM;
-        size_t m_BytesPerPixel = 4;  // 1 byte per channel × 4 channels
-
-        const size_t pixelCount = static_cast<size_t>(width) * height;
-        char*        out        = static_cast<char*>(malloc(pixelCount * m_BytesPerPixel));
-
-        // Set entire texture to white (255 in all channels)
-        memset(out, 255, pixelCount * m_BytesPerPixel);
-
-        // Create a distinct red region in top-left (200x200 pixels)
-        const int markerSize = 50;
-        for (int y = 0; y < markerSize; y++)
-        {
-            for (int x = 0; x < markerSize * 4; x++)
-            {
-                const int idx = (y * width + x) * 4;
-                out[idx]      = 255;  // R - full intensity
-                out[idx + 1]  = 0;    // G - none
-                out[idx + 2]  = 0;    // B - none
-                out[idx + 3]  = 255;  // A - full opacity
-            }
-        }
-
-        // Set class members - USE CHAR* COMPATIBLE TYPE
-        m_pData = out;
-
-        // Fill texture description
-        texDesc.Width            = width;
-        texDesc.Height           = height;
-        texDesc.MipLevels        = 1;
-        texDesc.DepthOrArraySize = 1;
-        texDesc.Dimension        = TextureDimension::Texture2D;
-        texDesc.Format           = ResourceFormat::RGBA8_UNORM;
 
         return true;
     }

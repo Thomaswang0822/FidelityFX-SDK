@@ -20,8 +20,8 @@
             "BackBufferCount": 3,
             "Vsync": false,
             "Fullscreen": false,
-            "Width": 3840,
-            "Height": 2160,
+            "Width": 2560,
+            "Height": 1440,
             "Mode": "DISPLAYMODE_HDR10_SCRGB",
             "SwapchainFormat": "RGBA16_FLOAT"
         },
