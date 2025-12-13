@@ -316,7 +316,7 @@ private:
     std::vector<cauldron::Texture*> m_pHackColors = {};
     std::vector<cauldron::Texture*> m_pHackMVs    = {};
     std::vector<cauldron::Texture*> m_pHackDepths = {};
-    std::vector<std::pair<float, float>> m_pHackJitterXY    = {};
+    std::vector<std::pair<float, float>> m_pHackJitterXY = {};
     // see ExportDebugFrame()
     static constexpr size_t   m_kSkipFramesInput       = 0;
     static constexpr size_t   m_kSkipFramesSR          = 1;

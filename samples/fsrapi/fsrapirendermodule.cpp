@@ -168,6 +168,8 @@ bool FSRRenderModule::LoadHackTextures()
     }
 
     std::vector<std::wstring>       textureLoadPaths  = hackOptions.hackPaths;
+    // TODO: remove the duplicate 3rd element after refactoring MVD load
+    textureLoadPaths.push_back(textureLoadPaths.back());
     const std::vector<std::wstring> renderTargetNames = {L"CurrFrameHack", L"MvHack", L"DepthHack"};
     // temporarily used
     std::vector<std::vector<cauldron::Texture*>*> hackTargets = {&m_pHackColors, &m_pHackMVs, &m_pHackDepths};
@@ -208,8 +210,8 @@ bool FSRRenderModule::LoadHackTextures()
             EXRTextureDataBlock::ParseJitter(exrFiles, m_pHackJitterXY);
 
         /// NOTE: hackOptions.frameCount is the fixed total number of frames in the testdata folder,
-        /// but user can set a smaller hackOptions.opFrameCount to check in test runs.
-        nTextures = hackOptions.opFrameCount;
+        /// but user can set a smaller hackOptions.outputFrameCount to check in test runs.
+        nTextures = hackOptions.outputFrameCount;
         for (size_t frameIdx = 0; frameIdx < nTextures; ++frameIdx)
         {
             rtFullname = renderTargetNames[typeIdx] + L"_" + std::to_wstring(frameIdx);
@@ -946,28 +948,26 @@ bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, cons
     /// For inputs (actual API resource to bind inputs, instead of our Debug resources), no skip
     ///  
     /// hackOptions.storeOutput should be checked before calling
-    std::string suffix = [skipN]() { 
+    
+    // IIFE, more readable than nested (cond ? A : B)
+    std::string suffix = [skipN](const std::string& s) -> std::string { 
         if (skipN == m_kSkipFramesInput)
             return "input";
         else if (skipN == m_kSkipFramesSR)
-            return "";  // to ensure SR output comes before FG output in filesystem.
+            return s + "";  // to ensure SR output comes before FG output in filesystem.
         else if (skipN == m_kSkipFramesFG)
-            return "fg";
+            return s + "_fg";
         else
             return "WRONG";
-    }();
-    if (skipN != m_kSkipFramesInput)
-    {
-        // prepend mode tag
-        suffix = hackOptions.modeString + suffix;
-    }
+    }(hackOptions.modeString);
 
-    size_t outputCount = hackOptions.enableHack ? hackOptions.opFrameCount : 15;
+    size_t outputCount = hackOptions.enableHack ? hackOptions.outputFrameCount : 15;
     
-    if (frameID < skipN + outputCount || frameID >= 2 * outputCount + skipN)
+    if (frameID < skipN || frameID >= outputCount + skipN)
     //if (frameID >= outputCount)
         return true;
-    frameID -= skipN + outputCount;
+    frameID -= skipN;
+    frameID += hackOptions.baseFrameIndex;
 
     const ResourceState resourceState = SDKWrapper::GetFrameworkState(static_cast<FfxResourceStates>(debugResource.state));
     const TextureDesc   textureDesc   = SDKWrapper::GetFrameworkTextureDescription(debugResource.description);
@@ -1105,7 +1105,7 @@ bool FSRRenderModule::ExportDebugFrame2Inputs(
             return "WRONG";
     }();
 
-    size_t outputCount = hackOptions.enableHack ? hackOptions.opFrameCount : 15;
+    size_t outputCount = hackOptions.enableHack ? hackOptions.outputFrameCount : 15;
 
     if (frameID < skipN + outputCount || frameID >= 2 * outputCount + skipN)
         return true;
@@ -1926,7 +1926,7 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
     if (!hackOptions.enableHack)
     {
         const_cast<HackOptionDef&>(hackOptions).storeOutput    = false;
-        const_cast<HackOptionDef&>(hackOptions).opFrameCount = 15;
+        const_cast<HackOptionDef&>(hackOptions).outputFrameCount = 15;
         const_cast<HackOptionDef&>(hackOptions).identifier     = "DefaultSceneBB";
         const_cast<HackOptionDef&>(hackOptions).outPath        = L"../media/EmptySanityCheck/Horizontal/outputs";
     }

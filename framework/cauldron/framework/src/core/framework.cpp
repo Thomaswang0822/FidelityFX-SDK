@@ -145,6 +145,78 @@ namespace cauldron
         {ShaderModel::SM6_6,      "SM6_6"},
         {ShaderModel::SM6_7,      "SM6_7"},
     })
+    ///////////////////////////////////////////////////////////////////
+    // HackOptionDef
+    bool HackOptionDef::PostProcess()
+    {
+        // sanity check
+        if (!std::filesystem::exists(hackPaths[0]) || !std::filesystem::exists(hackPaths[1]))
+            CauldronError(L"Not both of Color Path %s and MVD path %s exist", hackPaths[0].c_str(), hackPaths[1].c_str());
+
+        // If outPath not given, set to <parent of Color Path>/outputs
+        if (outPath == L"") {
+            outPath = (std::filesystem::path(hackPaths[0]).parent_path() / "outputs").wstring();
+        }
+
+        // Set frameCount to MVD count
+        frameCount = static_cast<size_t>(std::count_if(
+            std::filesystem::directory_iterator(hackPaths[1]), 
+            std::filesystem::directory_iterator{}, 
+            [](const auto& entry) {return entry.path().extension() == ".exr";}
+        ));
+
+        size_t colorCount = 0;  // will count later
+
+        // To check duplicate
+        size_t minID = std::numeric_limits<size_t>::max();
+        std::unordered_set<std::wstring> allSeenPrefix;
+
+        for (const auto& it : std::filesystem::directory_iterator(hackPaths[0]))
+        {
+            const auto& fullPath = it.path();
+            if (fullPath.extension() != ".exr")
+                continue;
+
+            colorCount++;
+
+            // construct prefix until we hit a numeric frameID token
+            std::string pathPrefix = "";
+            std::istringstream pathSS(fullPath.stem().generic_string());
+            for (std::string token; std::getline(pathSS, token, '_'); ) {
+                if (!token.empty() && std::all_of(token.begin(), token.end(), ::isdigit)) {
+                    minID = std::min(minID, std::stoull(token));
+                    allSeenPrefix.emplace(StringToWString(pathPrefix));
+                    break;
+                }
+                else {
+                    // not frameID yet
+                    pathPrefix += token + "_";
+                }
+            } // end parsing one file
+        }
+        if (allSeenPrefix.empty())
+            CauldronError(L"%s has no .exr files", hackPaths[0].c_str());
+        else if (allSeenPrefix.size() > 1)
+            CauldronError(L"Found duplicate filename prefix when `alignFilename` is set: %s and %s",
+                          allSeenPrefix.begin()->c_str(),
+                          std::next(allSeenPrefix.begin())->c_str());
+        else if (alignFilename) {
+            // overwrite identifier even if user has set it; NOTE the hashkey has an extra '_'
+            identifier = WStringToString(allSeenPrefix.begin()->data());
+            identifier.pop_back();
+            
+            baseFrameIndex = minID;
+        }
+
+
+        if (frameCount != colorCount)
+            CauldronError(L"%s and %s don't have equal .exr count: [%d, %d]", hackPaths[0].c_str(), hackPaths[1].c_str(), frameCount, colorCount);
+
+        if (outputFrameCount == 0 || outputFrameCount > frameCount)
+            outputFrameCount = frameCount;
+
+        return true;
+    }
 
     ///////////////////////////////////////////////////////////////////
     // CauldronConfig
@@ -1094,26 +1166,32 @@ namespace cauldron
 
     void Framework::ParseHackOptions(const json& jsonConfigData)
     {
-        // Get the global switch
-        json configData = jsonConfigData;
-        if (configData.find("HackOptions") == configData.end()) 
+        if (jsonConfigData.find("HackOptions") == jsonConfigData.end()) 
             return;
         
-        json jsonHackOptions = configData["HackOptions"];
-        CauldronAssert(ASSERT_ERROR, jsonHackOptions.find("EnableHack") != jsonHackOptions.end(), L"HackOptions must have EnableHack field");
-        bool enableHack                 = jsonHackOptions.value<bool>("EnableHack", false);
-        m_Config.HackOptions.enableHack = enableHack;
+        // input
+        const json& jsonHackOptions = jsonConfigData["HackOptions"];
+        CauldronAssert(ASSERT_ERROR, jsonHackOptions.contains("EnableHack"), L"HackOptions must have EnableHack field");
+        // output
+        auto& structHackOption      = m_Config.HackOptions;
+
+        bool enableHack = jsonHackOptions.value<bool>("EnableHack", false);
+        structHackOption.enableHack = enableHack;
         if (!enableHack)
             return;
 
-        // Identifier (scene name)
-        if (jsonHackOptions.find("Identifier") != jsonHackOptions.end())
+        if (jsonHackOptions.contains("Identifier"))
         {
-            m_Config.HackOptions.identifier = jsonHackOptions.value<std::string>("Identifier", "UNDEFINED");
+            structHackOption.identifier = jsonHackOptions.value<std::string>("Identifier", "UNDEFINED");
+        }
+
+        if (jsonHackOptions.contains("ParseJitter"))
+        {
+            structHackOption.parseJitter = jsonHackOptions.value("ParseJitter", false);
         }
         
         // Render Resolution: only accept alias <1 or 2 or 4> in json config
-        if (jsonHackOptions.find("DisplayResolution") != jsonHackOptions.end())
+        if (jsonHackOptions.contains("DisplayResolution"))
         {
             uint32_t resOption = jsonHackOptions.value<uint32_t>("DisplayResolution", 0);
             // Using iterator let us check "if 1 or 2 or 4" only once.
@@ -1124,58 +1202,47 @@ namespace cauldron
             std::tie(m_Config.Width, m_Config.Height) = it->second;
         }
 
-        // Parse jitter or not
-        if (jsonHackOptions.find("ParseJitter") != jsonHackOptions.end())
+        if (jsonHackOptions.contains("ParseJitter"))
         {
-            m_Config.HackOptions.parseJitter = jsonHackOptions.value("ParseJitter", false);
+            structHackOption.parseJitter = jsonHackOptions.value("ParseJitter", false);
         }
 
-        // Paths the input should be folder path to frame capture, like NPP_JI
-        std::filesystem::path parentPath;
-        if (jsonHackOptions.find("HackPaths") != jsonHackOptions.end())
+        if (jsonHackOptions.contains("HackPaths"))
         {
-            m_Config.HackOptions.hackPaths.push_back(StringToWString(jsonHackOptions.value<std::string>(
-                "HackPaths", "../media/TEST_SCENE/NPP_JI")
-            ));
-
-            /// we need 3 entries of 2 subfolders:
-            parentPath = std::filesystem::path(m_Config.HackOptions.hackPaths.front()).parent_path();
-            auto jitterPath = parentPath / "MVD_JI";
-            m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
-            m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
+            const auto& hackPaths = jsonHackOptions["HackPaths"];
+            if (hackPaths.is_array()) {
+                // Given 2 paths, store directly
+                //structHackOption.hackPaths = hackPaths.get<std::vector<std::wstring>>();
+                // Unfortunately getting std::vector<std::wstring> is not supported
+                for (const auto& p : hackPaths)
+                    structHackOption.hackPaths.push_back(StringToWString(p.get<std::string>()));
+            }
+            else {
+                CauldronAssert(ASSERT_ERROR, hackPaths.is_string(), L"HackPaths in json is neither array or string");
+                auto parent = StringToWString(hackPaths.get<std::string>());
+                structHackOption.hackPaths.push_back(parent + HackOptionDef::ColorSubdir);
+                structHackOption.hackPaths.push_back(parent + HackOptionDef::MVDSubdir);
+            }
+            CauldronAssert(ASSERT_ERROR, structHackOption.hackPaths.size() == 2, L"[json] Failed to determine 2 paths");
         }
 
-        m_Config.HackOptions.storeOutput = jsonHackOptions.value("StoreOutput", false);
+        structHackOption.storeOutput = jsonHackOptions.value("StoreOutput", false);
 
-        if (jsonHackOptions.find("OutputPath") != jsonHackOptions.end())
+        if (jsonHackOptions.contains("OutputPath"))
         {
-            m_Config.HackOptions.outPath = StringToWString(jsonHackOptions.value<std::string>(
+            structHackOption.outPath = StringToWString(jsonHackOptions.value<std::string>(
                 "OutputPath", "../media/TEST_SCENE/outputs"));
         }
-        else
+
+        if (jsonHackOptions.contains("OutputFrameCount"))
         {
-            // default outPath to <parentPath>/outputs
-            m_Config.HackOptions.outPath = parentPath.append("outputs").wstring();
+            structHackOption.outputFrameCount = jsonHackOptions.value<size_t>("OutputFrameCount", 0);
         }
 
-        // First, we make do a sanity check: exr file numbers should match 
-        auto count_exr_files = [](const std::filesystem::path& folderPath) {
-            return std::count_if(std::filesystem::directory_iterator(folderPath), std::filesystem::directory_iterator{}, [](const auto& entry) {
-                return entry.path().extension() == ".exr";
-            });
-        };
-        const auto colorCount = count_exr_files(std::filesystem::path(m_Config.HackOptions.hackPaths.front()));
-        const auto MVDCount   = count_exr_files(std::filesystem::path(m_Config.HackOptions.hackPaths.back()));
-        CauldronAssert(ASSERT_ERROR, colorCount == MVDCount, 
-            L"frame color count and MVD count should match, but got %d and %d", colorCount, MVDCount);
-        
-        // then set 2 counters:
-        // opFrameCount = frameCount (capture all output) if it's not set OR it's larger than frameCount
-        m_Config.HackOptions.frameCount = static_cast<size_t>(colorCount);
-        CauldronAssert(ASSERT_WARNING, m_Config.HackOptions.frameCount != 0, L"Found 0 input exr image");
-        m_Config.HackOptions.opFrameCount = std::min(
-            jsonHackOptions.value<size_t>("OptionalFrameCount", m_Config.HackOptions.frameCount), 
-            m_Config.HackOptions.frameCount);
+        if (jsonHackOptions.contains("AlignFilename"))
+        {
+            structHackOption.alignFilename = jsonHackOptions.value<bool>("AlignFilename", 0);
+        }
     }
 
     void Framework::InitConfig()
@@ -1185,6 +1252,9 @@ namespace cauldron
 
         // Parse the command line parameters (these can be used to override config params)
         ParseCmdLine(m_CmdLine.c_str());
+
+        if (m_Config.HackOptions.enableHack)
+            m_Config.HackOptions.PostProcess();
 
         // GPU timing info is synched to the swapchain and reported with a delay equal to the number of back buffers
         // so we need to set up that delay at the start
@@ -1367,7 +1437,7 @@ namespace cauldron
                 isValid &= *nxt[0] == L'-';
             
             if (!isValid) {
-                CauldronCritical(L"%s requires %d input to be provided (usage: %s %s", 
+                CauldronError(L"%s requires %d input to be provided (usage: %s %s", 
                     argKey, numValues, argKey, placeholderStr.c_str());
             }
             return isValid;
@@ -1375,7 +1445,8 @@ namespace cauldron
 
         /// ParseCmdLine() happens after json config parse, and we allow any subset of hack options
         /// to be overwritten, as long as hack mode is on.
-        bool hackMode = m_Config.HackOptions.enableHack;
+        auto& structHackOption = m_Config.HackOptions; // output
+        bool hackMode = structHackOption.enableHack;
 
         std::wstring command;
         for (int currentArg = 0; currentArg < argCount; ++currentArg)
@@ -1683,10 +1754,11 @@ namespace cauldron
                 continue;
             }
 
+#pragma region HackCmdline
             if (command == L"-EnableHack")
             {
                 hackMode = true;
-                m_Config.HackOptions.enableHack = true;
+                structHackOption.enableHack = true;
                 continue;
             }
 
@@ -1694,14 +1766,14 @@ namespace cauldron
             {
                 // We require at least 1 argument
                 CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
-                m_Config.HackOptions.identifier = WStringToString(pArgList[currentArg + 1]);
+                structHackOption.identifier = WStringToString(pArgList[currentArg + 1]);
                 currentArg += 1;
                 continue;
             }
 
             if (hackMode && command == L"-DisplayResolution")
             {
-                // TODO: support both resolution pair and alias.
+                // Support both resolution pair and alias.
                 bool isAlias = false;
                 // Is it an alias (ofc we don't accept 1~4 as Width)? Manual check b/c shouldn't throw
                 if (argCount - currentArg > 1 && pArgList[currentArg + 1][0] != L'-') {
@@ -1726,42 +1798,51 @@ namespace cauldron
 
             if (hackMode && command == L"-ParseJitter")
             {
-                m_Config.HackOptions.parseJitter = true;
+                structHackOption.parseJitter = true;
                 continue;
             }
 
             if (hackMode && command == L"-HackPaths")
             {
+                // Ensure cmdline overwrites whatever set by json config
+                structHackOption.hackPaths.clear();
                 // We require at least 1 argument
                 CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
+                structHackOption.hackPaths.push_back(pArgList[currentArg + 1]);
 
-                // Ensure cmdline overwrites whatever set by json config
-                m_Config.HackOptions.hackPaths.clear();
-                m_Config.HackOptions.hackPaths.push_back(pArgList[currentArg + 1]);
-                /// we need 3 entries of 2 subfolders:
-                auto parentPath = std::filesystem::path(m_Config.HackOptions.hackPaths.front()).parent_path();
-                auto jitterPath = parentPath / "MVD_JI";
-                CauldronAssert(ASSERT_ERROR, std::filesystem::exists(jitterPath), L"Encoded MVs and Depths exr files must be stored in %s", jitterPath.c_str());
-                m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
-                m_Config.HackOptions.hackPaths.push_back(jitterPath.wstring());
+                bool isGivenBoth = (argCount - currentArg) > 2 && pArgList[currentArg + 2][0] != L'-';
+                if (isGivenBoth) {
+                    structHackOption.hackPaths.push_back(pArgList[currentArg + 2]);
+                }
+                else {
+                    // front stores parent path
+                    structHackOption.hackPaths.push_back(structHackOption.hackPaths.front() + HackOptionDef::MVDSubdir);
+                    structHackOption.hackPaths.front() += HackOptionDef::ColorSubdir;
+                }
 
-                currentArg += 1;
+                currentArg += isGivenBoth ? 2 : 1;
                 continue;
             }
 
             if (hackMode && command == L"-StoreOutput")
             {
-                m_Config.HackOptions.storeOutput = true;
+                structHackOption.storeOutput = true;
                 continue;
             }
 
 
-            if (hackMode && command == L"-OptionalFrameCount")
+            if (hackMode && command == L"-OutputFrameCount")
             {
                 // We require at least 1 argument
                 CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
-                m_Config.HackOptions.opFrameCount = std::stoull(pArgList[currentArg + 1]);  // size_t is u long long
+                structHackOption.outputFrameCount = std::stoull(pArgList[currentArg + 1]);  // size_t is u long long
                 currentArg += 1;
+                continue;
+            }
+
+            if (hackMode && command == L"-AlignFilename")
+            {
+                structHackOption.alignFilename = true;
                 continue;
             }
 
@@ -1769,28 +1850,12 @@ namespace cauldron
             {
                 // We require at least 1 argument
                 CauldronAssert(ASSERT_CRITICAL, argCount - currentArg > 1 && ValidateArgValueCount(&pArgList[currentArg]), L"");
-                m_Config.HackOptions.outPath = pArgList[currentArg + 1];
+                structHackOption.outPath = pArgList[currentArg + 1];
                 currentArg += 1;
                 continue;
             }
+#pragma endregion
         }
-
-        // First, we make do a sanity check: exr file numbers should match
-        auto count_exr_files = [](const std::filesystem::path& folderPath) {
-            return std::count_if(std::filesystem::directory_iterator(folderPath), std::filesystem::directory_iterator{}, [](const auto& entry) {
-                return entry.path().extension() == ".exr";
-            });
-        };
-        const auto colorCount = count_exr_files(std::filesystem::path(m_Config.HackOptions.hackPaths.front()));
-        const auto MVDCount   = count_exr_files(std::filesystem::path(m_Config.HackOptions.hackPaths.back()));
-        CauldronAssert(ASSERT_ERROR, colorCount == MVDCount, L"frame color count and MVD count should match, but got %d and %d", colorCount, MVDCount);
-
-        // then set 2 counters:
-        // opFrameCount = frameCount (capture all output) if it's not set OR it's larger than frameCount
-        m_Config.HackOptions.frameCount = static_cast<size_t>(colorCount);
-        CauldronAssert(ASSERT_WARNING, m_Config.HackOptions.frameCount != 0, L"Found 0 input exr image");
-        if (m_Config.HackOptions.opFrameCount == 0 || m_Config.HackOptions.opFrameCount > m_Config.HackOptions.frameCount)
-            m_Config.HackOptions.opFrameCount = m_Config.HackOptions.frameCount;
 
         // Pass on the command line string to the sample in the event they are overriding our parsing
         ParseSampleCmdLine(cmdLine);
