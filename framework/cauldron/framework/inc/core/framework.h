@@ -112,13 +112,13 @@ namespace cauldron
         /// [optional] Set to frameCount if not given. Allow running on a subset of inputs.
         size_t outputFrameCount = 0;
         std::wstring outPath      = L"";
-        /// A custom identifier for hack export filename, used as the prefix. i.e. <identifier>_<frameID>_<modeString>.exr
-        /// Default to "UNDEFINED" if not given. Overwritten by input filename prefix if `alignFilename` is true.
-        std::string identifier   = "UNDEFINED";
+        /// An optional custom identifier for hack export filename, used as the prefix. i.e. <identifier>_<frameID>_<modeString>.exr
+        /// Overwritten by input filename prefix if `alignFilename` is true or itself is not set.
+        std::string identifier   = "";
         /// Stores full paths to Color data and MV + Depth data (almost always NPP_JI and MVD_JI for us).
         std::vector<std::wstring> hackPaths    = {};
 
-        // internal, should not be set directly. Set by counting exr files in hackPaths
+        // INTERNAL, should not be set directly. Set by counting exr files in hackPaths
         size_t frameCount = 0;
         /// INTERNAL When `alignFilename`, we get the base frame index also from filename, 
         /// such that the 1st exported frame is not "0000" but "2472".
@@ -130,16 +130,18 @@ namespace cauldron
         static constexpr wchar_t* ColorSubdir = L"/NPP_JI";
         static constexpr wchar_t* MVDSubdir   = L"/MVD_JI";
         /**
-         * @brief Do the following after setup the struct from json config and cmdline:
+         * @brief Do the following AFTER setup the struct from json config and cmdline:
          * 
          * 1. If outPath not given, set to <parent of Color Path>/outputs
          * 
          * 2. Set frameCount to MVD count. 
          * 
-         * 3. Set outputFrameCount to frameCount if it's not set (== 0) or too big.
+         * 3. Iterate thru color testdata files. Extract prefix and frameID from each filename. Store the smallest frameID;
+         * ensure all files have the same prefix. If identifier is not given, set to prefix.
          * 
-         * 4. If alignFilename, set baseFrameIndex to smallest value and overwrite identifier to prefix from input filenames. 
-         * e.g. For input "NPP_beauty_2472_0000_0_-0.40563965_-0.35599041.exr" being the first frame, its reference has name "NPP_beauty_2472.exr" (in NPP_GT/).
+         * 4. If alignFilename, set baseFrameIndex to smallest frameID and overwrite identifier to prefix. 
+         * 
+         * e.g. For "NPP_beauty_2472_0000_0_-0.40563965_-0.35599041.exr" being the first frame, its reference has name "NPP_beauty_2472.exr" (in NPP_GT/).
          * The identifier will be set to "NPP_beauty" and baseFrameIndex to 2072.
          * In this way, we output filenames "NPP_beauty_2472_[Quality | Quality_fg].exr", which helps filesystem and image viewers to sort them in order.
          * 

@@ -607,7 +607,7 @@ namespace cauldron
             fileName.c_str(), idxR, idxG, idxB);
 
         // 6. Convert to target format
-        const size_t inputPixelCount    = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
+        const size_t inputPixelCount = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
 
         // NEW: Check if the image is tiled
         bool isTiled = (header.tiled != 0);
@@ -701,6 +701,11 @@ namespace cauldron
         // malloc to full display resolution
         uint32_t bytesPerPixel = (texFormat == ResourceFormat::RGBA16_FLOAT) ? 8 : 4;
         const auto [mallocWidth, mallocHeight] = GetFramework()->GetResolutionInfo().DisplayResolution();
+        CauldronAssert(ASSERT_CRITICAL, image.width <= mallocWidth && image.height <= mallocHeight,
+                       L"EXR input resolution (%d x %d) is larger than the allocated display resolution (%d x %d)",
+                       image.width, image.height,
+                       mallocWidth, mallocHeight);
+
         char* finalCharData = static_cast<char*>(malloc(mallocWidth * mallocHeight * bytesPerPixel));
         if (!finalCharData) {
             CauldronError(L"Failed to allocate memory for EXR texture data.");
@@ -870,7 +875,7 @@ namespace cauldron
         const uint32_t inputHeight = static_cast<uint32_t>(image.height);
         const auto [mallocWidth, mallocHeight] = GetFramework()->GetResolutionInfo().DisplayResolution();
         CauldronAssert(ASSERT_CRITICAL, inputWidth <= mallocWidth && inputHeight <= mallocHeight,
-                       L"EXR input resolution (%d x %d) is larger than the allocated render resolution (%d x %d)",
+                       L"EXR input resolution (%d x %d) is larger than the allocated display resolution (%d x %d)",
                        inputWidth, inputHeight,
                        mallocWidth, mallocHeight);
         char* mvByteData    = static_cast<char*>(malloc(mallocWidth * mallocHeight * 4 /* bytesPerPixel = 2x2 */));

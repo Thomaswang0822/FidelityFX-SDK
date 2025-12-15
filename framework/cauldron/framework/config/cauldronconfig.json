@@ -95,7 +95,7 @@
 
         "HackOptions": {
             "EnableHack": true,
-            "DisplayResolution": 2,
+            "DisplayResolution": 1,
             "HackPathssssss": [
                 "../media/EmptySanityCheck/Horizontal/NPP_JI_selection",
                 "../media/EmptySanityCheck/Horizontal/MVD_JI"
@@ -105,7 +105,8 @@
             "StoreOutput": true,
             "OutputPath": "../media/TEST_SCENE/outputs",
             "OutputFrameCount": 15,
-            "AlignFilename": true
+            "AlignFilename": true,
+            "Identifier": "Whatever"
         }
     }
 }

@@ -200,7 +200,7 @@ namespace cauldron
             CauldronError(L"Found duplicate filename prefix when `alignFilename` is set: %s and %s",
                           allSeenPrefix.begin()->c_str(),
                           std::next(allSeenPrefix.begin())->c_str());
-        else if (alignFilename) {
+        else if (alignFilename || identifier == "") {
             // overwrite identifier even if user has set it; NOTE the hashkey has an extra '_'
             identifier = WStringToString(allSeenPrefix.begin()->data());
             identifier.pop_back();
@@ -1180,16 +1180,6 @@ namespace cauldron
         if (!enableHack)
             return;
 
-        if (jsonHackOptions.contains("Identifier"))
-        {
-            structHackOption.identifier = jsonHackOptions.value<std::string>("Identifier", "UNDEFINED");
-        }
-
-        if (jsonHackOptions.contains("ParseJitter"))
-        {
-            structHackOption.parseJitter = jsonHackOptions.value("ParseJitter", false);
-        }
-        
         // Render Resolution: only accept alias <1 or 2 or 4> in json config
         if (jsonHackOptions.contains("DisplayResolution"))
         {
@@ -1202,10 +1192,7 @@ namespace cauldron
             std::tie(m_Config.Width, m_Config.Height) = it->second;
         }
 
-        if (jsonHackOptions.contains("ParseJitter"))
-        {
-            structHackOption.parseJitter = jsonHackOptions.value("ParseJitter", false);
-        }
+        structHackOption.parseJitter = jsonHackOptions.value("ParseJitter", false);
 
         if (jsonHackOptions.contains("HackPaths"))
         {
@@ -1226,23 +1213,13 @@ namespace cauldron
             CauldronAssert(ASSERT_ERROR, structHackOption.hackPaths.size() == 2, L"[json] Failed to determine 2 paths");
         }
 
-        structHackOption.storeOutput = jsonHackOptions.value("StoreOutput", false);
+        structHackOption.storeOutput      = jsonHackOptions.value<bool>("StoreOutput", false);
+        structHackOption.outputFrameCount = jsonHackOptions.value<size_t>("OutputFrameCount", 0);
 
-        if (jsonHackOptions.contains("OutputPath"))
-        {
-            structHackOption.outPath = StringToWString(jsonHackOptions.value<std::string>(
-                "OutputPath", "../media/TEST_SCENE/outputs"));
-        }
+        structHackOption.outPath = StringToWString(jsonHackOptions.value<std::string>("OutputPath", ""));
 
-        if (jsonHackOptions.contains("OutputFrameCount"))
-        {
-            structHackOption.outputFrameCount = jsonHackOptions.value<size_t>("OutputFrameCount", 0);
-        }
-
-        if (jsonHackOptions.contains("AlignFilename"))
-        {
-            structHackOption.alignFilename = jsonHackOptions.value<bool>("AlignFilename", 0);
-        }
+        structHackOption.alignFilename = jsonHackOptions.value<bool>("AlignFilename", false);
+        structHackOption.identifier    = jsonHackOptions.value<std::string>("Identifier", "");
     }
 
     void Framework::InitConfig()
@@ -1758,6 +1735,9 @@ namespace cauldron
             if (command == L"-EnableHack")
             {
                 hackMode = true;
+
+                // make sure cmdline overwrites json config
+                structHackOption = {};
                 structHackOption.enableHack = true;
                 continue;
             }
