@@ -215,9 +215,6 @@ namespace cauldron
     class EXRTextureDataBlock : public TextureDataBlock
     {
     public:
-        static constexpr size_t Width1K  = 1920;
-        static constexpr size_t Height1K = 1080;
-        static constexpr size_t PixelCount1K = Width1K * Height1K;
         enum class SpecialChannelType : int
         {
             ColorRGB = 0,       // format handled by SetResourceFormat()
@@ -225,48 +222,38 @@ namespace cauldron
             Depth = 2           // R32_FLOAT format
         };
 
+        // Use a map to detect inconsistent resolution. Its size will be 1 most of the times.
+        static std::map<std::pair<uint32_t, uint32_t>, std::wstring> AllSeenResolution;
 
-        EXRTextureDataBlock(float scaleFactor = 1.0f)
+        EXRTextureDataBlock()
+            : TextureDataBlock() {};
+        EXRTextureDataBlock(char* rawData)
             : TextureDataBlock()
-            , m_UpscaleRatio(scaleFactor)
-        {}
+            , m_pData(rawData) {};
         virtual ~EXRTextureDataBlock();
 
+        /// @brief Should NOT be called.
         virtual bool LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
 
         virtual void CopyTextureData(void* pDest, uint32_t stride, uint32_t widthStride, uint32_t height, uint32_t sliceOffset) override;
 
         /**
-         * @brief   Loads motion vectors or depth from a FIXED 1k jitter EXR file (RG=motion vectors, B=depth)
+         * @brief Load frame buffer color data from a EXR file.
+         * 
+         * @param exrPaths Path to the EXR file
+         * @return Success or not
+         */
+        bool LoadColorData(const std::filesystem::path& textureFile);
+
+        /**
+         * @brief Loads motion vectors and depth from a EXR file (RG=motion vectors, B=depth).
+         * 
+         * MV data are stored in self, depth data are returned as a new EXRTextureDataBlock.
          * 
          * @param textureFile    Path to the EXR file
-         * @param alphaThreshold Unused parameter (retained for signature compatibility)
-         * @param texDesc        Output texture description
-         * @param channelType    Specifies whether to load motion vectors or depth
-         * 
-         * @return               If loading succeeded
+         * @return a new EXRTextureDataBlock shared_ptr storing depth data.
          */
-        bool LoadJitterData1K(std::filesystem::path& textureFile, 
-                              float alphaThreshold, 
-                              TextureDesc& texDesc,
-                              SpecialChannelType channelType);
-
-        /**
-         * @brief   Sets the resource format to that in the swapchain.
-         * @param format Should be one of the following, already be set by SwapChain creation:
-         * RGBA8_UNORM, RGB10A2_UNORM, or RGBA16_FLOAT.
-         * 
-         */
-        void SetResourceFormat(ResourceFormat format) { 
-            m_Format = format; 
-        }
-
-        /**
-         * @brief Creates a debug texture with four distinct regions for coordinate verification
-         * 
-         * @param texDesc Texture description to populate
-         */
-        bool CreateDebugCoordinateTexture(TextureDesc& texDesc);
+        std::shared_ptr<EXRTextureDataBlock> LoadMVandCreateDepth(const std::filesystem::path& textureFile);
 
         /**
          * @brief Given a list of all exr file paths, extract jitter from filename and store to output vector
@@ -281,15 +268,8 @@ namespace cauldron
 
 
     private:
-        std::wstring textureName   = L"uninitialized";
         char*  m_pData    = nullptr;  // EXR uses float*, but it will cause error
-        int    m_Width    = 0;
-        int    m_Height   = 0;
-        int    m_Channels = 0;
-        // depending on display mode LDR or HDR, see setter
-        ResourceFormat m_Format = ResourceFormat::Unknown;
-        uint32_t       m_BytesPerPixel = 4;
-        float          m_UpscaleRatio  = 1.0f;
+        // Necessary because we supports 3 formats, must be known before LoadTextureData()
     };
 
     /**

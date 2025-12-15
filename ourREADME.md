@@ -42,63 +42,60 @@ We inherit the SDK's recommended way to set up runtime options: through json con
 
 We have the following options:
 
-- EnableHack: a global switch, default false. If false, the app will run in its original behavior, rendering Sponza Palace.
-- Identifier: a string that helps you identify this run, default "UNDEFINED". Usually set to scene name.
-- RenderResolution: a int that controls the render resolution in K, default 1. Only accepted values are 1, 2, and 4.
-- ParseJitter: whether to parse and use the jitter data from input filenames, default false. Currently we only have it in 1K inputs, so it will be forced to false it render resolution is not 1K.
-- HackPaths: **a single folder relative path** to the input frame capture folder, default *"../media/TEST_SCENE/NPP_JI"*. The path to the encoded MVs and Depths will be constructed automatically by replacing "NPP_JI" to "MVD_JI".
-- StoreOutput: whether to store output (screenshots), default false.
-- OutputMaxCount: number of frames to take screenshots, default 0. When StoreOutput is true and OutputMaxCount is missing or bigger than number of input frames, it will default to capture all frames.
-- OutputPath: **a single folder relative path** to the output screenshots folder, like *"../media/TEST_SCENE/outputs"*
+- [Global Switch] EnableHack: default false. If false, the app will run in its original behavior, rendering Sponza Palace.
+- DisplayResolution: accepts 2 formats. See [this section](#resolution-system-in-fsr) for more details. TL;DR: User specifies display resolution here, render resolution is auto determined by the pre-scaled input image size, and upscale ratio is internally decided.
+  - `-DisplayResolution <width> <height>`. This is the general option and gives full flexibility. i.e. Except for extreme resolutions like 10x7, 19200x10800, users can choose any value, like 2880x1620. ***NOTE: this pair-format will not be parsed in the json config file under "HackOptions". Instead, set "Width" and "Height" under "Presentation" AND REMOVE the alias-format "DisplayResolution" in the file, as it will overwrite "Presentation" field.***
+  - `-DisplayResolution <alias>`, where `<alias>` accepts valid values 1, 2, and 4. This is a handy alternative for the common 1K, 2K, and 4K settings. Alias-format is accepted in both json config file and cmdline.
+- [Optional] ParseJitter: whether to parse and use the jitter data from input filenames, default false. Ensure filenames have it before setting it to true. (Hint: currently only NPP_JI files have it.)
+- HackPaths: accepts 2 formats.
+  - A single relative path to the scene testdata root, e.g. *"../media/TEST_SCENE"*. The paths to frame color data and MVD data (encoded MVs and Depths) will be constructed automatically by appending "NPP_JI" and "MVD_JI" respectively, which are the defaults when UE generates testdata.
+  - A pair of relative paths to the color data and MVD data. In json config file they are a list `"HackPaths": [<color path>, <MVD path>]`. In cmdline they are spaced: `-HackPaths <color path> <MVD path>`.
+- [Optional] StoreOutput: whether to export SR and SR+FG output frames to .exr files, default false.
+- [Optional] OutputFrameCount: number of frames to load and run on. When not given or the given value is larger than total .exr file count in color input path, default to this value to run on all frames.
+- [Optional **if StoreOutput not given**] OutputPath: a relative path to the exported frames folder, e.g. *"../media/TEST_SCENE/outputs"*. We recommend using an output folder in the testdata root.
+- [Optional] AlignFilename: if set, export filenames will be in order when put together with the reference result (should be in *NPP_GT*). A (reference, SR output, FG output) triplet would look like (*NPP_beauty_2472.exr, NPP_beauty_2472_Quality.exr, NPP_beauty_2472_Quality_fg.exr*). This helps looking at them in "chronological order" with image viewer. When false, the frameID in the export filenames will start from 0000.
+- [Optional] Identifier: a custom identifier for export filenames. If not given or AlignFilename is set to true, it will be the common prefix of all color data, e.g. *NPP_beauty*.
 
 Cmdline parsing of those hack-related runtime options is also provided. It would become useful when you have multiple launches of different scenes, (otherwise you likely need to change the input and output paths in the config file for each scene.)
 
-All bool options should be a single **-OptionaName**, and other options should be a **-OptionaName OptionValue** pair. An example single-run full command looks like:
+All bool options should be a single **-OptionName**, and other options should be a **-OptionName OptionValue** pair. A typical full command looks like:
 
 ```shell
 # cd to <Project Root>/bin
 
 ./FFX_API_FSR_DX12D.exe -EnableHack \
-                        -Identifier "Cmdline_TEST" \
-                        -RenderResolution 1 \
+                        -DisplayResolution 2560 1440 \  # or 2
                         -ParseJitter \
-                        -HackPaths "../media/TEST_SCENE/NPP_JI" \
+                        -HackPaths "../media/TEST_SCENE" \
                         -StoreOutput \
-                        -OutputMaxCount 5 \
-                        -OutputPath "../media/TEST_SCENE/outputs"
+                        -OutputPath "../media/TEST_SCENE/outputs" \
+                        -AlignFilename
 ```
 
 Note that when the global flag **-EnableHack** is set, the Cmdline parser, which works after the JSON parser, will first reset all options to default values then parse. Otherwise, nothing will be parsed from Cmdline.
 
 ## Several Things to Note
 
-### Resolutions
+### Resolution System in FSR
 
-Under the SR context, there are 2 resolutions: render resolution and display resolution, or pre- and post-SR resolution. The default choice is upscaling rendered output (which is input to SR) from 1k render resolution to 4k display resolution. Display resolution is what you set in the settings page of a game. And by choosing the "DLSS quality", which is essentially a ratio, the game knows at what resolution to render.
-
-The following block gives easy control over turning hacking on/off and the render resolution. Nothing else should be changed in the header or source file.
+Both DLSS and AMD's FSR **internally** determine render resolution based on user-selected display resolution + SR mode (DLSS calls it DLSS mode, FSR calls it scale preset). FSR gives explicit upscale ratio of these modes.
 
 ```cpp
-// ##### For Hacking use ONLY #####
-#define HACK_TEXTURES
-
-#ifdef HACK_TEXTURES
-#define HACK_INPUT_RES 1     // set render (not display) resolution ?K: 1k, 2k, or 4K
-
-// For now we only have jitter info in 1k inputs.
-#if HACK_INPUT_RES == 1
-#define PARSE_JITTER true
-#else
-#define PARSE_JITTER false
-#endif
-
-#endif  // HACK_TEXTURES
-// ##########
+    enum class FSRScalePreset : uint32_t
+    {
+        NativeAA = 0,       // 1.0f
+        Quality,            // 1.5f
+        Balanced,           // 1.7f
+        Performance,        // 2.f
+        UltraPerformance,   // 3.f
+        Custom              // 1.f - 3.f range
+    };
 ```
 
-The default choice is 1k->4k, as our 1k inputs have additional jitter data. 2k inputs are not in the existing inputs. If needed, we need to handle the creation of them. Should it be upscaled from 1k inputs or downscaled from 4k inputs?
+But we want to specify both render and display resolution, and stop FSR from resizing render resolution to the value it computes. Thus, the hack is to force the mode to `Custom` and compute the custom ratio b/w display resolution (from "-DisplayResolution")
+and render resolution (from the input image resolution). It is valid because this `FSRScalePreset` is solely used to compute the upscale ratio. In DLSS, this is a bit more complicated because a similar `enum class DLSSMode` is tightly binded to the pipeline and thus we have to set it carefully.
 
-Also, the display resolution is fixed at 4k. Don't worry about not having 4k monitor, as the app window will scale properly. If you want to try other display resolutions, which should work in theory but haven't been carefully tested, change it in the [config JSON file](framework/cauldron/framework/config/cauldronconfig.json) under "Presentation".
+BTW, don't worry about not having 4k monitor when you want to test 4k, as the app window will scale properly and you will get 4K export.
 
 ### Inputs format
 

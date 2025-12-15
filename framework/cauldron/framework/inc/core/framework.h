@@ -100,6 +100,63 @@ namespace cauldron
         json            InitOptions;    ///< Initialization options from json to configure the module at init time
     };
 
+    struct HackOptionDef
+    {
+        bool enableHack    = false;
+        /// If true, a jitter pair will be parsed from each input filename.
+        /// e.g. NPP_beauty_2472_0000_0_-0.40563965_-0.35599041.exr gives (-0.40563965, -0.35599041)
+        bool parseJitter   = false;
+        bool storeOutput   = false;
+        /// This helps filesystem and image viewers to sort them in order. @see PostProcess() below.
+        bool alignFilename = false;
+        /// [optional] Set to frameCount if not given. Allow running on a subset of inputs.
+        size_t outputFrameCount = 0;
+        std::wstring outPath      = L"";
+        /// An optional custom identifier for hack export filename, used as the prefix. i.e. <identifier>_<frameID>_<modeString>.exr
+        /// Overwritten by input filename prefix if `alignFilename` is true or itself is not set.
+        std::string identifier   = "";
+        /// Stores full paths to Color data and MV + Depth data (almost always NPP_JI and MVD_JI for us).
+        std::vector<std::wstring> hackPaths    = {};
+
+        // INTERNAL, should not be set directly. Set by counting exr files in hackPaths
+        size_t frameCount = 0;
+        /// INTERNAL When `alignFilename`, we get the base frame index also from filename, 
+        /// such that the 1st exported frame is not "0000" but "2472".
+        size_t baseFrameIndex = 0;
+        // INTERNAL, a "fake tag" of FSRScalePreset, since we always use Custom internally.
+        std::string modeString;
+
+        // Modify them if necessary:
+        static constexpr wchar_t* ColorSubdir = L"/NPP_JI";
+        static constexpr wchar_t* MVDSubdir   = L"/MVD_JI";
+        /**
+         * @brief Do the following AFTER setup the struct from json config and cmdline:
+         * 
+         * 1. If outPath not given, set to <parent of Color Path>/outputs
+         * 
+         * 2. Set frameCount to MVD count. 
+         * 
+         * 3. Iterate thru color testdata files. Extract prefix and frameID from each filename. Store the smallest frameID;
+         * ensure all files have the same prefix. If identifier is not given, set to prefix.
+         * 
+         * 4. If alignFilename, set baseFrameIndex to smallest frameID and overwrite identifier to prefix. 
+         * 
+         * e.g. For "NPP_beauty_2472_0000_0_-0.40563965_-0.35599041.exr" being the first frame, its reference has name "NPP_beauty_2472.exr" (in NPP_GT/).
+         * The identifier will be set to "NPP_beauty" and baseFrameIndex to 2072.
+         * In this way, we output filenames "NPP_beauty_2472_[Quality | Quality_fg].exr", which helps filesystem and image viewers to sort them in order.
+         * 
+         * @return true if nothing worng.
+         * @throw CauldronError if a) Color count and MVD count mismatch or any is empty. b) Color filenames have more than 1 prefix.
+         */
+        bool PostProcess();
+    };
+
+    static inline const std::map<uint32_t, std::pair<uint32_t, uint32_t>> AliasResolutionMap = {
+        { 1, {1920, 1080} },
+        { 2, {2560, 1440} }, 
+        { 4, {3840, 2160} },
+    };
+
     /**
      * @struct CauldronConfig
      *
@@ -218,25 +275,7 @@ namespace cauldron
 
         } StartupContent;
 
-        struct HackOptionDef
-        {
-            bool                      enableHack        = false;
-            std::string               identifier        = "";
-            enum class HackDisplayResolution
-            {
-                DR_1K = 1,
-                DR_2K = 2,
-                DR_4K = 4
-            } displayResolution                        = HackDisplayResolution::DR_1K;
-            bool                      parseJitter      = false;
-            std::vector<std::wstring> hackPaths        = {};
-            bool                      storeOutput      = false;
-            size_t                    outputMaxCount   = 0;
-            std::wstring              outPath          = L"";
-
-            // internal, should not be set directly. Set by counting exr files in hackPaths
-            size_t frameCount = 0;
-        } HackOptions;
+        HackOptionDef                 HackOptions;
 
         // Perf Output
         uint32_t                      BenchmarkFrameDuration = -1;
@@ -571,12 +610,6 @@ namespace cauldron
          */
         const ResolutionInfo& GetResolutionInfo() const { return m_ResolutionInfo; }
 
-        void UpdateRenderResolution(uint32_t renderWidth, uint32_t renderHeight)
-        {
-            m_ResolutionInfo.RenderWidth = renderWidth;
-            m_ResolutionInfo.RenderHeight = renderHeight;
-        }
-
         /**
          * @brief   Enables or disabled upscaling in the application.
          */
@@ -755,8 +788,8 @@ namespace cauldron
         std::wstring            m_ConfigFileName;
         std::wstring            m_CmdLine;
         std::wstring            m_CPUName = L"Not Set";
-        ResolutionInfo          m_ResolutionInfo            = {1920, 1080, 1920, 1080, 1920, 1080};
-        ResolutionInfo          m_BenchmarkResolutionInfo   = {1920, 1080, 1920, 1080, 1920, 1080};
+        ResolutionInfo          m_ResolutionInfo            = {1280, 720, 2560, 1440, 2560, 1440};
+        ResolutionInfo          m_BenchmarkResolutionInfo   = {1280, 720, 2560, 1440, 2560, 1440};
         UpscalerState           m_UpscalingState = UpscalerState::None;
         ResolutionUpdateFunc    m_ResolutionUpdaterFn = nullptr;
         bool                    m_UpscalerEnabled = false;

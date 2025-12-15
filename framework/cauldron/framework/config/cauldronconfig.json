@@ -20,8 +20,8 @@
             "BackBufferCount": 3,
             "Vsync": false,
             "Fullscreen": false,
-            "Width": 3840,
-            "Height": 2160,
+            "Width": 2560,
+            "Height": 1440,
             "Mode": "DISPLAYMODE_HDR10_SCRGB",
             "SwapchainFormat": "RGBA16_FLOAT"
         },
@@ -95,13 +95,18 @@
 
         "HackOptions": {
             "EnableHack": true,
-            "Identifier": "Generated",
-            "DisplayResolution": 4,
+            "DisplayResolution": 1,
+            "HackPathssssss": [
+                "../media/EmptySanityCheck/Horizontal/NPP_JI_selection",
+                "../media/EmptySanityCheck/Horizontal/MVD_JI"
+            ],
+            "HackPaths": "../media/TEST_SCENE",
             "ParseJitter": true,
-            "HackPaths": "../media/EmptySanityCheck/Horizontal/NPP_JI_selection",
             "StoreOutput": true,
-            "OutputMaxCount": 15,
-            "OutputPath": "../media/EmptySanityCheck/Horizontal/outputs"
+            "OutputPath": "../media/TEST_SCENE/outputs",
+            "OutputFrameCount": 15,
+            "AlignFilename": true,
+            "Identifier": "Whatever"
         }
     }
 }

@@ -28,6 +28,7 @@
 #include "misc/fileio.h"
 #include "render/device.h"
 #include "render/gpuresource.h"
+#include "render/swapchain.h"
 
 // Needed for EXR loading
 #ifndef TINYEXR_IMPLEMENTATION
@@ -39,6 +40,8 @@
 
 namespace cauldron
 {
+    std::map<std::pair<uint32_t, uint32_t>, std::wstring> EXRTextureDataBlock::AllSeenResolution;
+
     template <typename T>
     uint16_t convertToFP16(T value, uint32_t scale, ExportInfo::BitUnpackMode mode)
     {
@@ -275,15 +278,15 @@ namespace cauldron
             // Figure fp16Data how to load this texture (whether it's a DDS or other)
             bool ddsFile = loadInfo.TextureFile.extension() == L".dds" || loadInfo.TextureFile.extension() == L".DDS";
             bool exrFile = loadInfo.TextureFile.extension() == L".exr" || loadInfo.TextureFile.extension() == L".EXR";
+            if (exrFile) {
+                CauldronError(L"Loading exr file %s as regular TextureContent is not supported.", loadInfo.TextureFile.wstring().c_str());
+            }
+            
             TextureDataBlock* pTextureData;
 
             if (ddsFile)
             {
                 pTextureData = new DDSTextureDataBlock();
-            }
-            else if (exrFile)
-            {
-                pTextureData = new EXRTextureDataBlock();
             }
             else
             {
@@ -530,10 +533,14 @@ namespace cauldron
 
     bool EXRTextureDataBlock::LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc)
     {
-        // Set texture format at the very beginning
-        texDesc.Format = this->m_Format;
+        CauldronError(L"EXRTextureDataBlock::LoadTextureData() shouldn't be called");
+        return false;
+    }
 
-        textureName          = textureFile.wstring();
+    bool EXRTextureDataBlock::LoadColorData(const std::filesystem::path& textureFile)
+    {
+        // Very important: we support 3 formats for color targets
+        auto texFormat = GetFramework()->GetSwapChain()->GetSwapChainFormat();
         std::string fileName = textureFile.u8string();
 
         // Modern TinyEXR API
@@ -600,7 +607,7 @@ namespace cauldron
             fileName.c_str(), idxR, idxG, idxB);
 
         // 6. Convert to target format
-        const size_t inputPixelCount    = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
+        const size_t inputPixelCount = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
 
         // NEW: Check if the image is tiled
         bool isTiled = (header.tiled != 0);
@@ -691,23 +698,25 @@ namespace cauldron
         tinyexr::FP32  fp32_ONE{ 1.0f };
         const uint16_t fp16_ONE = tinyexr::float_to_half_full(fp32_ONE).u;
 
-        /// Malloc byte array depending on format and upscale factor
-        /// NOTE that we fix the render resolution to 1K, but may get input smaller than 1K.
-        m_BytesPerPixel     = (m_Format == ResourceFormat::RGBA16_FLOAT) ? 8 : 4;
-        const size_t outputWidth   = Width1K * m_UpscaleRatio;
-        const size_t outputHeight  = Height1K * m_UpscaleRatio;
-        char* finalCharData = static_cast<char*>(malloc(outputWidth * outputHeight * m_BytesPerPixel));
-        if (!finalCharData)
-        {
-           CauldronError(L"Failed to allocate memory for EXR texture data.");
+        // malloc to full display resolution
+        uint32_t bytesPerPixel = (texFormat == ResourceFormat::RGBA16_FLOAT) ? 8 : 4;
+        const auto [mallocWidth, mallocHeight] = GetFramework()->GetResolutionInfo().DisplayResolution();
+        CauldronAssert(ASSERT_CRITICAL, image.width <= mallocWidth && image.height <= mallocHeight,
+                       L"EXR input resolution (%d x %d) is larger than the allocated display resolution (%d x %d)",
+                       image.width, image.height,
+                       mallocWidth, mallocHeight);
+
+        char* finalCharData = static_cast<char*>(malloc(mallocWidth * mallocHeight * bytesPerPixel));
+        if (!finalCharData) {
+            CauldronError(L"Failed to allocate memory for EXR texture data.");
             return false;
         }
-        std::memset(finalCharData, 0, outputWidth * outputHeight * m_BytesPerPixel);
+        std::memset(finalCharData, 0, mallocWidth * mallocHeight * bytesPerPixel);
 
         /// Texture should be stored "2D". 
         /// E.g. for 2x upscaling, the 1k texture will be stored in the top-left 0.5x0.5 area
         /// of the 4k render target buffer, instead of the top 0.25 x 1 area.
-        switch (m_Format)
+        switch (texFormat)
         {
         ///< 4-Component (RGBA) 32-bit (unsigned normalized) type.
         case ResourceFormat::RGBA8_UNORM:
@@ -722,7 +731,7 @@ namespace cauldron
                 for (size_t j = 0; j < image.width; ++j)
                 {
                     idxSrc = i * image.width + j;
-                    idxDst = i * outputWidth + j;  // only fill in the top-left area
+                    idxDst = i * mallocWidth + j;  // only fill in the top-left area
 
                     fp32Data[idxDst] = PackRGBA8(r[idxSrc], g[idxSrc], b[idxSrc], a ? a[idxSrc] : fp16_ONE);
                 }
@@ -744,7 +753,7 @@ namespace cauldron
                 for (size_t j = 0; j < image.width; ++j)
                 {
                     idxSrc = i * image.width + j;
-                    idxDst = i * outputWidth + j;  // only fill in the top-left area
+                    idxDst = i * mallocWidth + j;  // only fill in the top-left area
 
                     fp32Data[idxDst] = PackRGB10A2(r[idxSrc], g[idxSrc], b[idxSrc], a ? a[idxSrc] : fp16_ONE);
                 }
@@ -766,7 +775,7 @@ namespace cauldron
                 for (size_t j = 0; j < image.width; ++j)
                 {
                     idxSrc = i * image.width + j;
-                    idxDst = i * outputWidth + j;  // only fill in the top-left area
+                    idxDst = i * mallocWidth + j;  // only fill in the top-left area
 
                     fp16Data[4 * idxDst + 0] = r[idxSrc];
                     fp16Data[4 * idxDst + 1] = g[idxSrc];
@@ -780,26 +789,18 @@ namespace cauldron
 
         default:
         {
-            CauldronError(L"Invalid texture format: %s", GetResourceFormatString(this->m_Format));
+            CauldronError(L"Invalid texture format: %s", GetResourceFormatString(texFormat));
             return false;
         }
         }  // end of switch
 
-        // 7. Update texture data
-        m_Width  = image.width;
-        m_Height = image.height;
-
-        // Store to member char* in the end in order not to pollute memory.
+        // 7. Store to member char* in the end in order not to pollute memory.
         if (m_pData)
             free(m_pData);
         m_pData = finalCharData;
 
-        // 8. Set texture description
-        texDesc.Width            = m_Width;
-        texDesc.Height           = m_Height;
-        texDesc.MipLevels        = 1;
-        texDesc.DepthOrArraySize = 1;
-        texDesc.Dimension        = TextureDimension::Texture2D;
+        // 8. Update bucket
+        AllSeenResolution.try_emplace({image.width, image.height}, textureFile.wstring());
 
         return true;
     }
@@ -809,23 +810,8 @@ namespace cauldron
         for (uint32_t y = 0; y < height; ++y)
             memcpy((char*)pDest + y * stride, m_pData + y * bytesWidth, bytesWidth);
     }
-
-    bool EXRTextureDataBlock::LoadJitterData1K(
-        std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc, SpecialChannelType channelType)
+    std::shared_ptr<EXRTextureDataBlock> EXRTextureDataBlock::LoadMVandCreateDepth(const std::filesystem::path& textureFile)
     {
-        CauldronAssert(ASSERT_ERROR, channelType != SpecialChannelType::ColorRGB, L"RGB color should not be read by this function.");
-
-        // Set the texture format based on channel type
-        if (channelType == SpecialChannelType::MotionVectors)
-        {
-            texDesc.Format  = ResourceFormat::RG16_FLOAT;
-            m_BytesPerPixel = 4;  // 2 channels × 2 bytes each
-        }
-        else
-        {  // Depth
-            texDesc.Format  = ResourceFormat::R32_FLOAT;
-            m_BytesPerPixel = 4;  // 1 channel × 4 bytes
-        }
 
         // Initialize EXR structures
         EXRVersion version;
@@ -838,44 +824,31 @@ namespace cauldron
         // Parse EXR version
         std::string fileName = textureFile.u8string();
         int         ret      = ParseEXRVersionFromFile(&version, fileName.c_str());
-        if (ret != TINYEXR_SUCCESS)
-        {
+        if (ret != TINYEXR_SUCCESS) {
             CauldronError(L"Invalid EXR version: %s", fileName.c_str());
-            return false;
         }
 
         // Parse EXR header
         ret = ParseEXRHeaderFromFile(&header, &version, fileName.c_str(), &err);
-        if (ret != TINYEXR_SUCCESS)
-        {
+        if (ret != TINYEXR_SUCCESS) {
             if (err)
-            {
                 CauldronError(L"EXR header error: %s", err);
-            }
-            return false;
         }
 
         // Ensure tinyexr read as FP16 according to the spec
         for (int i = 0; i < header.num_channels; i++)
-        {
             CauldronAssert(ASSERT_WARNING, header.requested_pixel_types[i] == TINYEXR_PIXELTYPE_HALF, L"Input spec says each RGB channel is 16 bits.");
-        }
 
         // Load EXR image
         ret = LoadEXRImageFromFile(&image, &header, fileName.c_str(), &err);
-        if (ret != TINYEXR_SUCCESS)
-        {
+        if (ret != TINYEXR_SUCCESS) {
             if (err)
-            {
                 CauldronError(L"EXR load error: %s", err);
-            }
-            return false;
         }
 
         // Find channel indices (R=motionX, G=motionY, B=depth)
         int idxR = -1, idxG = -1, idxB = -1;
-        for (int c = 0; c < header.num_channels; c++)
-        {
+        for (int c = 0; c < header.num_channels; c++) {
             if (strcmp(header.channels[c].name, "R") == 0)
                 idxR = c;
             else if (strcmp(header.channels[c].name, "G") == 0)
@@ -885,150 +858,73 @@ namespace cauldron
         }
 
         // Validate required channels
-        if (channelType == SpecialChannelType::MotionVectors && (idxR == -1 || idxG == -1))
-        {
+        if (idxR == -1 || idxG == -1 || idxB == -1) {
             CauldronError(L"Motion vectors require R and G channels in %ls", textureFile.c_str());
-            return false;
-        }
-        if (channelType == SpecialChannelType::Depth && idxB == -1)
-        {
-            CauldronError(L"Depth requires B channel in %ls", textureFile.c_str());
-            return false;
         }
 
         // Get channel pointers; tinyexr use uint16_t = unsigned short for FP16
         uint16_t* r = idxR != -1 ? reinterpret_cast<uint16_t*>(image.images[idxR]) : nullptr;
         uint16_t* g = idxG != -1 ? reinterpret_cast<uint16_t*>(image.images[idxG]) : nullptr;
         uint16_t* b = idxB != -1 ? reinterpret_cast<uint16_t*>(image.images[idxB]) : nullptr;
-        CauldronAssert(ASSERT_CRITICAL, r != nullptr && g != nullptr && b != nullptr, 
-            L"EXR file %ls has null channel pointers when converting to uint16_t: r = %p, g = %p, b = %p", 
-            fileName.c_str(), r, g, b);
-        
-        /// Set input and output data size.
-        /// Input is always 1k. 
-        /// Output = 1k * m_UpscaleRatio = display resolution. This is how big to malloc.
-        const size_t inputWidth  = static_cast<size_t>(image.width);
-        const size_t inputHeight = static_cast<size_t>(image.height);
-        CauldronAssert(ASSERT_ERROR, inputWidth == Width1K && inputHeight == Height1K, L"Jitter EXR input must be 1k resolution.");
-        const size_t outputWidth  = inputWidth * m_UpscaleRatio;
-        const size_t outputHeight   = inputHeight * m_UpscaleRatio;
+        CauldronAssert(ASSERT_CRITICAL, r != nullptr && g != nullptr && b != nullptr,
+                       L"EXR file %ls has null channel pointers when converting to uint16_t: r = %p, g = %p, b = %p",
+                       fileName.c_str(), r, g, b);
 
-        // Allocate raw bytes array first, then reinterpret_cast to FP16 or FP32
-        char* charData = static_cast<char*>(malloc(outputWidth * outputHeight * m_BytesPerPixel));
-        if (!charData)
-        {
+        // Input size (render resolution) can be any, but we always malloc to display resolution.
+        const uint32_t inputWidth  = static_cast<uint32_t>(image.width);
+        const uint32_t inputHeight = static_cast<uint32_t>(image.height);
+        const auto [mallocWidth, mallocHeight] = GetFramework()->GetResolutionInfo().DisplayResolution();
+        CauldronAssert(ASSERT_CRITICAL, inputWidth <= mallocWidth && inputHeight <= mallocHeight,
+                       L"EXR input resolution (%d x %d) is larger than the allocated display resolution (%d x %d)",
+                       inputWidth, inputHeight,
+                       mallocWidth, mallocHeight);
+        char* mvByteData    = static_cast<char*>(malloc(mallocWidth * mallocHeight * 4 /* bytesPerPixel = 2x2 */));
+        char* depthByteData = static_cast<char*>(malloc(mallocWidth * mallocHeight * 4 /* bytesPerPixel = 4x1 */));
+        if (!mvByteData || !depthByteData)
             CauldronError(L"Memory allocation failed for %ls", textureFile.c_str());
-            return false;
-        }
 
-        /// NOTE: jitter data is 1k fixed
-        size_t idxSrc, idxDst;
-        // used only when interpolation needed.
-        float  x_orig, y_orig;
-        size_t x0, x1, y0, y1;
-        float  weight_x, weight_y;
-        if (channelType == SpecialChannelType::MotionVectors)
-        {
-            uint16_t* fp16Data  = reinterpret_cast<uint16_t*>(charData);
-            auto      scaleMV  = [](uint16_t value, float ratio) -> uint16_t {
-                tinyexr::FP16 half;
-                half.u            = value;
-                tinyexr::FP32 flt = half_to_float(half);
-                flt.f *= ratio;
-                return float_to_half_full(flt).u;
-            };
+        uint16_t* mvData    = reinterpret_cast<uint16_t*>(mvByteData);
+        float*    depthData = reinterpret_cast<float*>(depthByteData);
 
-            for (int y = 0; y < inputHeight; y++)
-            {
-                for (int x = 0; x < inputWidth; x++)
-                {
-                    idxSrc = y * inputWidth + x;
-                    idxDst = (y * outputWidth + x) * 2;  // each mv stored as 2 fp16
+        auto scaleMV = [](uint16_t value, float ratio) -> uint16_t {
+            tinyexr::FP16 half;
+            half.u            = value;
+            tinyexr::FP32 flt = half_to_float(half);
+            flt.f *= ratio;
+            return float_to_half_full(flt).u;
+        };
 
-                    // ROOT cause of ghosting finally found: should scale by 0.5
-                    fp16Data[idxDst]     = scaleMV(r[idxSrc], -0.5f);  // mv.X
-                    fp16Data[idxDst + 1] = scaleMV(g[idxSrc], +0.5f);  // mv.Y
-                }
-            } // end iterating the image
-        }
-        else  // Depth processing
-        {
-            float* fp32Data = reinterpret_cast<float*>(charData);
-            for (int y = 0; y < inputHeight; y++)
-            {
-                for (int x = 0; x < inputWidth; x++)
-                {
-                                    
-                    idxSrc = y * inputWidth + x;
-                    idxDst = y * outputWidth + x;  // each depth stored as 1 fp32
+        // Iterate thru pixels;
+        uint32_t idxSrc, idxMV, idxDepth;
+        for (uint32_t y = 0; y < inputHeight; y++) {
+            for (uint32_t x = 0; x < inputWidth; x++) {
+                idxSrc = y * inputWidth + x;
 
-                    // no interpolation needed
-                    tinyexr::FP16 depth16 = {b[idxSrc]};
-                    fp32Data[idxDst]      = tinyexr::half_to_float(depth16).f;
-                }
-            } // end iterating the image
-        }
+                idxMV    = (y * mallocWidth + x) * 2;  // each mv stored as 2 fp16
+                idxDepth = y * mallocWidth + x;        // each depth stored as 1 fp32
 
-        // Set class members
+                // ROOT cause of ghosting finally found: should scale by 0.5
+                mvData[idxMV]     = scaleMV(r[idxSrc], -0.5f);  // mv.X
+                mvData[idxMV + 1] = scaleMV(g[idxSrc], +0.5f);  // mv.Y
+
+                                    // no interpolation needed
+                tinyexr::FP16 depth16 = {b[idxSrc]};
+                depthData[idxDepth]   = tinyexr::half_to_float(depth16).f;
+            }
+        } // end iterating the image
+
+        // Set self data (MV)
         if (m_pData)
             free(m_pData);
-        m_pData = charData;  // Store as char*
+        m_pData = mvByteData;
 
-        m_Width     = outputWidth * m_UpscaleRatio;
-        m_Height    = outputHeight * m_UpscaleRatio;
-        textureName = textureFile.wstring();
+        // Create depth data block
+        auto depthDataBlock = std::make_shared<EXRTextureDataBlock>(depthByteData);
 
-        // Fill texture description
-        texDesc.Width            = outputWidth;
-        texDesc.Height           = outputHeight;
-        texDesc.MipLevels        = 1;
-        texDesc.DepthOrArraySize = 1;
-        texDesc.Dimension        = TextureDimension::Texture2D;
+        // Update bucket
+        AllSeenResolution.try_emplace({image.width, image.height}, textureFile.wstring());
 
-        return true;
-    }
-
-    bool EXRTextureDataBlock::CreateDebugCoordinateTexture(TextureDesc& texDesc)
-    {
-        const int width  = 3840;
-        const int height = 2160;
-
-        // USE THE WORKING FORMAT - RGBA8_UNORM
-        texDesc.Format         = ResourceFormat::RGBA8_UNORM;
-        size_t m_BytesPerPixel = 4;  // 1 byte per channel × 4 channels
-
-        const size_t pixelCount = static_cast<size_t>(width) * height;
-        char*        out        = static_cast<char*>(malloc(pixelCount * m_BytesPerPixel));
-
-        // Set entire texture to white (255 in all channels)
-        memset(out, 255, pixelCount * m_BytesPerPixel);
-
-        // Create a distinct red region in top-left (200x200 pixels)
-        const int markerSize = 50;
-        for (int y = 0; y < markerSize; y++)
-        {
-            for (int x = 0; x < markerSize * 4; x++)
-            {
-                const int idx = (y * width + x) * 4;
-                out[idx]      = 255;  // R - full intensity
-                out[idx + 1]  = 0;    // G - none
-                out[idx + 2]  = 0;    // B - none
-                out[idx + 3]  = 255;  // A - full opacity
-            }
-        }
-
-        // Set class members - USE CHAR* COMPATIBLE TYPE
-        m_pData = out;
-
-        // Fill texture description
-        texDesc.Width            = width;
-        texDesc.Height           = height;
-        texDesc.MipLevels        = 1;
-        texDesc.DepthOrArraySize = 1;
-        texDesc.Dimension        = TextureDimension::Texture2D;
-        texDesc.Format           = ResourceFormat::RGBA8_UNORM;
-
-        return true;
+        return depthDataBlock;
     }
 
     bool EXRTextureDataBlock::ParseJitter(const std::vector<std::filesystem::path>& exrPaths, std::vector<std::pair<float, float>>& jitterXY)

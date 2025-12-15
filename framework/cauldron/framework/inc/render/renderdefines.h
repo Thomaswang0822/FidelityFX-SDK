@@ -630,6 +630,15 @@ namespace cauldron
 
     public:
 
+        inline std::pair<uint32_t, uint32_t> DisplayResolution() const {
+            return { DisplayWidth, DisplayWidth };
+        }
+
+        inline std::pair<uint32_t, uint32_t> yRenderResolution() const
+        {
+            return { RenderWidth, RenderHeight };
+        }
+
         /// Access render width as a floating point variable.
         ///
         inline float fRenderWidth()    const { return static_cast<float>(RenderWidth); }
@@ -656,7 +665,7 @@ namespace cauldron
 
         /// Compute the render aspect ratio.
         ///
-        inline float GetRenderAspectRatio()       const { return fRenderWidth() / fDisplayHeight(); }
+        inline float GetRenderAspectRatio()       const { return fRenderWidth() / fRenderHeight(); }
 
         /// Compute the display width scale ratio.
         ///

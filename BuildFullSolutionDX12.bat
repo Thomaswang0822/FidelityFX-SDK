@@ -63,14 +63,15 @@ set sdk_build_options=-DFFX_API_BACKEND=DX12_%arch% %sdk_build_options%
 echo Skipping SDK prebuild - SDK will be included in solution
 
 :: Remove then create new
-
-if exist build\ (
-    rmdir /S /Q build\
-)
 if exist bin\ (
     rmdir /S /Q bin\
 )
-mkdir build
+:: Keep build/.vs so that we don't need to reopen every file
+if exist build\ (
+    rm -Recurse build\*
+) else (
+    mkdir build
+)
 cd build
 
 echo.

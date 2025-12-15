@@ -57,7 +57,8 @@ class FSRRenderModule : public cauldron::RenderModule
 
 public:
     FSRRenderModule()
-        : RenderModule(L"FSRApiRenderModule"),
+        : RenderModule(L"FSRApiRenderModule"), 
+          hackOptions(cauldron::GetFramework()->GetConfig()->HackOptions),
           m_SafetyMarginInMs(0.1f),
           m_VarianceFactor (0.1f),
           m_AllowHybridSpin (false),
@@ -122,6 +123,25 @@ public:
 
     void UpdateExportInfo(cauldron::ExportInfo& info);
 
+    /**
+     * Except setting m_UpscaleMethod to input method, 
+     * it modifies m_CurScale, m_IsNonNative, and m_ScalePreset:
+     * 
+     * method == 0: turn off FFXAPI; always set m_ScalePreset = NativeAA. 
+     * In addition, if originally m_IsNonNative
+     * **** is false (FFXAPI currently also off), nothing else happens.
+     * **** is true, m_CurScale = <original> m_ScalePreset, m_IsNonNative turned to false,
+     *   
+     * 
+     * 
+     * method == 1: turn on FFXAPI; always set m_IsNonNative = true, m_ScalePreset = m_CurScale (original value)
+     * In addition, if originally m_IsNonNative
+     * **** is false (FFXAPI currently off), nothing else happens.
+     * **** is true, (m_CurScale = m_ScalePreset) then (m_ScalePreset = m_CurScale), so m_ScalePreset never changes
+     * 
+     * 
+     * \param method: 0 = native (FFXAPI off), 1 = FFXAPI
+     */
     void SetFilter(int32_t method)
     {
         m_UpscaleMethod = method;
@@ -134,9 +154,18 @@ public:
         UpdatePreset((int32_t*)&m_ScalePreset);
     }
 
+    inline std::pair<uint32_t, uint32_t> GetDisplayResolution() {
+        return cauldron::GetFramework()->GetResolutionInfo().DisplayResolution();
+    }
+
 private:
 
-    enum class FSRScalePreset
+    /**
+     * Unlike DLSS mode, which is deeply entangled with the entire pipeline,
+     * FSRScalePreset here is merely used to determine m_UpscaleRatio.
+     * (m_MipBias only uses the ratio of FSRScalePreset).
+     */
+    enum class FSRScalePreset : uint32_t
     {
         NativeAA = 0,       // 1.0f
         Quality,            // 1.5f
@@ -145,6 +174,28 @@ private:
         UltraPerformance,   // 3.f
         Custom              // 1.f - 3.f range
     };
+
+    static constexpr inline std::array<std::pair<FSRScalePreset, float>, 5> k_PresetRatioList = {
+        std::make_pair(FSRScalePreset::NativeAA,         1.0f),
+        std::make_pair(FSRScalePreset::Quality,          1.5f),
+        std::make_pair(FSRScalePreset::Balanced,         1.7f),
+        std::make_pair(FSRScalePreset::Performance,      2.0f),
+        std::make_pair(FSRScalePreset::UltraPerformance, 3.0f),
+    };
+
+    /**
+     * \return The FSRScalePreset whose ratio is closest to m_UpscaleRatio
+     */
+    inline FSRScalePreset FindMatchingPreset() const
+    {
+        auto it = std::min_element(k_PresetRatioList.begin(), k_PresetRatioList.end(), [this](const auto& lhs, const auto& rhs) {
+            const auto& [preset1, ratio1] = lhs;
+            const auto& [preset2, ratio2] = rhs;
+            return std::abs(ratio1 - m_UpscaleRatio) < std::abs(ratio2 - m_UpscaleRatio);
+        });
+
+        return it->first;
+    }
 
     enum class FSRMaskMode
     {
@@ -187,9 +238,11 @@ private:
 
     int32_t         m_UpscaleMethod   = Upscaler_FSRAPI;
     int32_t         m_UiUpscaleMethod = Upscaler_FSRAPI;
-    // The following 3 values are overwritten by config file or cmdline args
-    FSRScalePreset  m_CurScale        = FSRScalePreset::Performance;
-    FSRScalePreset  m_ScalePreset     = FSRScalePreset::Performance;
+    // ONLY used in SetFilter() as a temp value
+    FSRScalePreset  m_CurScale        = FSRScalePreset::Custom;
+    // The actual value used by app
+    FSRScalePreset  m_ScalePreset     = FSRScalePreset::Custom;
+    // Determined by m_ScalePreset in UpdatePreset()
     float           m_UpscaleRatio    = 2.f;
     float           m_LetterboxRatio  = 1.f;
     float           m_MipBias         = cMipBias[static_cast<uint32_t>(FSRScalePreset::NativeAA)];
@@ -256,11 +309,14 @@ private:
     const cauldron::Texture*  m_pReactiveMask          = nullptr;
     const cauldron::Texture*  m_pCompositionMask       = nullptr;
     const cauldron::Texture*  m_pOpaqueTexture         = nullptr;
+
+    // Reference to the HackOptions stored in Framework, init in constructor
+    const cauldron::HackOptionDef& hackOptions;
     // and our hacking data: input {frame_t_color, motion vectors, depth} textures
     std::vector<cauldron::Texture*> m_pHackColors = {};
     std::vector<cauldron::Texture*> m_pHackMVs    = {};
     std::vector<cauldron::Texture*> m_pHackDepths = {};
-    std::vector<std::pair<float, float>> m_pHackJitterXY    = {};
+    std::vector<std::pair<float, float>> m_pHackJitterXY = {};
     // see ExportDebugFrame()
     static constexpr size_t   m_kSkipFramesInput       = 0;
     static constexpr size_t   m_kSkipFramesSR          = 1;

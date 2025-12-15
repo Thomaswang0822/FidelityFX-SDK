@@ -47,6 +47,8 @@
 #include "render/vk/swapchain_vk.h"
 #endif  // FFX_API_DX12
 
+#include "magic_enum/magic_enum_all.hpp"
+
 #include <filesystem>
 #include <directx/d3dx12_core.h>
 
@@ -152,39 +154,26 @@ void RestoreApplicationSwapChain(bool recreateSwapchain = true);
 bool FSRRenderModule::LoadHackTextures()
 {
     // first do a sanity check on those paths in HackOptions
-    const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
     for (const auto& inPath : hackOptions.hackPaths)
-    {
-        CauldronAssert(ASSERT_ERROR, fs::exists(inPath), 
-            L"Input folder %s deosn't exist", inPath.c_str());
+        CauldronAssert(ASSERT_ERROR, fs::exists(inPath), L"Input folder %s deosn't exist", inPath.c_str());
 
-    }
-    if (!fs::exists(hackOptions.outPath))
-    {
+    if (hackOptions.storeOutput && !fs::exists(hackOptions.outPath)) {
         // Defensive, in case path doesn't exist
-        CauldronWarning(L"Sceenshot output dir DNE and will be created: %s", hackOptions.outPath.c_str());
+        CauldronWarning(L"Screenshot output dir DNE and will be created: %s", hackOptions.outPath.c_str());
         fs::create_directory(hackOptions.outPath);
     }
 
-    std::vector<std::wstring>       textureLoadPaths  = GetFramework()->GetConfig()->HackOptions.hackPaths;
-    const std::vector<std::wstring> renderTargetNames = {L"CurrFrameHack", L"MvHack", L"DepthHack"};
+    constexpr std::array<wchar_t*, 3> renderTargetNames = {L"CurrFrameHack", L"MvHack", L"DepthHack"};
     // temporarily used
     std::vector<std::vector<cauldron::Texture*>*> hackTargets = {&m_pHackColors, &m_pHackMVs, &m_pHackDepths};
 
-    CauldronAssert(
-        ASSERT_CRITICAL, m_CurScale != FSRScalePreset::Balanced && m_CurScale != FSRScalePreset::Custom, 
-        L"Cannot support 1.7x or custom scale ratio when EnableHack is on.");
-
-    const ResolutionInfo& resInfo = GetFramework()->GetResolutionInfo();
     std::vector<std::filesystem::path> exrFiles;
 
-    size_t       nTextures;
-    std::wstring rtFullname;
-
+    size_t nTextures = hackOptions.outputFrameCount; // No. textures to load and run on.
     // Populate exr filepath lists and return count
     auto populatePathList = [](std::wstring folderPath, std::vector<std::filesystem::path>& outPaths) -> size_t {
         outPaths.clear();
-        for (const auto& entry : filesystem::directory_iterator(folderPath))
+        for (const auto& entry : std::filesystem::directory_iterator(folderPath))
         {
             if (entry.path().extension() == ".exr")
                 outPaths.push_back(entry.path());
@@ -195,60 +184,76 @@ bool FSRRenderModule::LoadHackTextures()
         return outPaths.size();
     };
 
-    for (int typeIdx=0; typeIdx<3; ++typeIdx)
+    // Load Color
     {
-        // 0: ColorRGB, 1: MotionVectors, 2: Depth
-        auto type = static_cast<EXRTextureDataBlock::SpecialChannelType>(typeIdx);
-
-        // grab all exr files of current input type, parse jitter if reading ColorRGB
-        bool parseJitter = GetFramework()->GetConfig()->HackOptions.parseJitter && 
-                           type == EXRTextureDataBlock::SpecialChannelType::ColorRGB;
-
-        nTextures        = populatePathList(textureLoadPaths[typeIdx], exrFiles);
-        CauldronAssert(ASSERT_CRITICAL, nTextures == hackOptions.frameCount, 
-                       L"No. input files counted by EXRTextureDataBlock::ParseJitter() (%d) and lambda function (%d) don't match.",
-                       nTextures, hackOptions.frameCount);
-        if (parseJitter)
+        if (populatePathList(hackOptions.hackPaths.front(), exrFiles) != hackOptions.frameCount)
+            CauldronError(L"Color input file count mismatch with hackOptions.frameCount");
+        if (hackOptions.parseJitter)
             EXRTextureDataBlock::ParseJitter(exrFiles, m_pHackJitterXY);
 
-        /// NOTE: hackOptions.frameCount is the fixed total number of frames to load,
-        /// but user can set a smaller hackOptions.outputMaxCount to check in test runs.
-        nTextures = hackOptions.outputMaxCount;
+        TextureDesc dummyDesc = {};
         for (size_t frameIdx = 0; frameIdx < nTextures; ++frameIdx)
         {
-            rtFullname = renderTargetNames[typeIdx] + L"_" + std::to_wstring(frameIdx);
-            TextureLoadInfo textureInfo(exrFiles[frameIdx]);
-
-            // NOTE, m_UpscaleRatio is display res / render res, controlled by m_CurScale.
-            auto textureDB = std::make_unique<EXRTextureDataBlock>(m_UpscaleRatio);
-            if (type == EXRTextureDataBlock::SpecialChannelType::ColorRGB)
-            {
-                textureDB->SetResourceFormat(GetFramework()->GetSwapChain()->GetSwapChainFormat());
-            }
-            TextureDesc textureDesc = {};
-
             // first get the render target
-            hackTargets[typeIdx]->push_back(const_cast<cauldron::Texture*>(GetFramework()->GetRenderTexture(rtFullname.c_str())));
-            CauldronAssert(ASSERT_CRITICAL, hackTargets[typeIdx]->back() != nullptr, L"Hack render target %s GetRenderTexture() failed", rtFullname.c_str());
+            std::wstring rtFullname = renderTargetNames[0] + (L"_" + std::to_wstring(frameIdx));  // can't add 2 wchar_t*
+            m_pHackColors.push_back(const_cast<cauldron::Texture*>(GetFramework()->GetRenderTexture(rtFullname.c_str())));
+            CauldronAssert(ASSERT_ERROR, m_pHackColors.back() != nullptr, L"GetRenderTexture() on %s failed", rtFullname.c_str());
 
-            // load
-            bool loaded = false;
-            if (type == EXRTextureDataBlock::SpecialChannelType::ColorRGB)
-            {
-                loaded = textureDB->LoadTextureData(textureInfo.TextureFile, textureInfo.AlphaThreshold, textureDesc);
-            }
-            else
-            {
-                loaded = textureDB->LoadJitterData1K(textureInfo.TextureFile, textureInfo.AlphaThreshold, textureDesc, type);
-            }
-            CauldronAssert(ASSERT_CRITICAL, loaded, L"Hack texture %s loaded failed", textureLoadPaths[typeIdx].c_str());
+            // create texture DB
+            auto colorDB = std::make_unique<EXRTextureDataBlock>();
+            //colorDB->SetResourceFormat(GetFramework()->GetSwapChain()->GetSwapChainFormat());
+            colorDB->LoadColorData(exrFiles[frameIdx]);
+            
             // then copy
-            hackTargets[typeIdx]->back()->CopyData(textureDB.get());
+            m_pHackColors.back()->CopyData(colorDB.get());
+        }
 
-        }  // end of each texture
-    }  // end of all textures of one type
+        CauldronAssert(ASSERT_ERROR, m_pHackColors.size() == nTextures, L"Color hack target count mismatch");
+    }
+
+    // Load MV and Depth together
+    {
+        if (populatePathList(hackOptions.hackPaths.back(), exrFiles) != hackOptions.frameCount)
+            CauldronError(L"MVD input file count mismatch with hackOptions.frameCount");
+
+        for (size_t frameIdx = 0; frameIdx < nTextures; ++frameIdx)
+        {
+            // first get both render targets
+            std::wstring mvRTName    = renderTargetNames[1] + (L"_" + std::to_wstring(frameIdx));
+            std::wstring depthRTName = renderTargetNames[2] + (L"_" + std::to_wstring(frameIdx));
+            m_pHackMVs.push_back(const_cast<cauldron::Texture*>(GetFramework()->GetRenderTexture(mvRTName.c_str())));
+            m_pHackDepths.push_back(const_cast<cauldron::Texture*>(GetFramework()->GetRenderTexture(depthRTName.c_str())));
+            CauldronAssert(ASSERT_ERROR, m_pHackMVs.back() != nullptr, L"GetRenderTexture() on %s failed", mvRTName.c_str());
+            CauldronAssert(ASSERT_ERROR, m_pHackDepths.back() != nullptr, L"GetRenderTexture() on %s failed", depthRTName.c_str());
+
+            // create texture DB
+            auto mvDB = std::make_unique<EXRTextureDataBlock>();
+            auto depthDB = mvDB->LoadMVandCreateDepth(exrFiles[frameIdx]);
+
+            // then copy
+            m_pHackMVs.back()->CopyData(mvDB.get());
+            m_pHackDepths.back()->CopyData(depthDB.get());
+        }
+
+        CauldronAssert(ASSERT_ERROR, m_pHackMVs.size() == nTextures && m_pHackDepths.size() == nTextures, L"MVD hack target count mismatch");
+    }
 
     //CheckHackColors("AfterLoad");
+
+    // Ensure all exr inputs have same resolution and force write to Framework resolution info (render res)
+    const auto& allSeenResolution = EXRTextureDataBlock::AllSeenResolution;
+    if (allSeenResolution.size() != 1) {
+        // log then abort
+        CauldronWarning(L"Input data don't have consistent resolution");
+        for (const auto& [res, pathStr] : allSeenResolution) {
+            CauldronWarning(L"%s: [%d, %d]", pathStr.c_str(), res.first, res.second);
+        }
+        CauldronError(L"FSRRenderModule::LoadHackTextures() ABORT");
+    }
+    const auto& [w, h] = allSeenResolution.begin()->first;
+    auto& resInfo      = const_cast<ResolutionInfo&>(GetFramework()->GetResolutionInfo());
+    resInfo.RenderWidth  = w;
+    resInfo.RenderHeight = h;
 
     return true;
 }
@@ -323,7 +328,9 @@ void FSRRenderModule::Init(const json& initData)
     m_RasterViews[1] = GetRasterViewAllocator()->RequestRasterView(m_pCompositionMask, ViewDimension::Texture2D);
 
     // Set our render resolution function as that to use during resize to get render width/height from display width/height
-    m_pUpdateFunc = [this](uint32_t displayWidth, uint32_t displayHeight) { return this->UpdateResolution(displayWidth, displayHeight); };
+    m_pUpdateFunc = 
+        
+        [this](uint32_t displayWidth, uint32_t displayHeight) { return this->UpdateResolution(displayWidth, displayHeight); };
 
     //////////////////////////////////////////////////////////////////////////
     // Register additional execution callbacks during the frame
@@ -515,38 +522,17 @@ void FSRRenderModule::Init(const json& initData)
     //////////////////////////////////////////////////////////////////////////
     // Finish up init
 
-    /// Hacked upscale ratio needs to be set before the SwitchUpscaler() call below
-    if (GetFramework()->GetConfig()->HackOptions.enableHack)
+    /// So far under hack mode, display res has been set by cmdline/json parser.
+    /// First set Custom mode in order to freely set m_UpscaleRatio (to be display/render resolution).
+    /// Then load hack textures. This func sets render res.
+    /// Finally, SwitchUpscaler() will compute m_UpscaleRatio as we want.
+    if (hackOptions.enableHack)
     {
-        switch (GetFramework()->GetConfig()->HackOptions.displayResolution)
-        {
-        case CauldronConfig::HackOptionDef::HackDisplayResolution::DR_1K:
-            m_CurScale    = FSRScalePreset::NativeAA;
-            m_ScalePreset = FSRScalePreset::NativeAA;
-            break;
-        case CauldronConfig::HackOptionDef::HackDisplayResolution::DR_2K:
-            m_CurScale    = FSRScalePreset::Quality;
-            m_ScalePreset = FSRScalePreset::Quality;
-            break;
-        case CauldronConfig::HackOptionDef::HackDisplayResolution::DR_4K:
-            m_CurScale    = FSRScalePreset::Performance;
-            m_ScalePreset = FSRScalePreset::Performance;
-            break;
-        default:
-            break;
-        }
+        m_ScalePreset = FSRScalePreset::Custom;
+        CauldronAssert(ASSERT_CRITICAL, LoadHackTextures(), L"Loading hack textures failed");
     }
 
     SwitchUpscaler(m_UiUpscaleMethod);
-
-    /// We load the hacking textures in the very end, because it needs render resolution to be updated
-    /// different from display resolution. This is done AFTER:
-    /// - setting m_pUpdateFunc (see above);
-    /// - calling SwitchUpscaler, which ultimately calls m_pUpdateFunc to change GetFramework()->GetResolutionInfo()
-    ///     and Framework::ResizeEvent() to actually rezie render targets
-    if (GetFramework()->GetConfig()->HackOptions.enableHack)
-        CauldronAssert(ASSERT_CRITICAL, LoadHackTextures(), L"Loading hack textures failed");
-
 
     // That's all we need for now
     SetModuleReady(true);
@@ -940,7 +926,6 @@ void FSRRenderModule::InitUI(UISection* pUISection)
 
 bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, const size_t skipN, std::string customName)
 {
-    const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
     size_t      frameID     = m_FrameID;
 
     /// When calling at the end of Execute(), we skip frames to align with actual displayed frame.
@@ -953,23 +938,26 @@ bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, cons
     /// For inputs (actual API resource to bind inputs, instead of our Debug resources), no skip
     ///  
     /// hackOptions.storeOutput should be checked before calling
-    std::string suffix = [skipN]() { 
+    
+    // IIFE, more readable than nested (cond ? A : B)
+    std::string suffix = [skipN](const std::string& s) -> std::string { 
         if (skipN == m_kSkipFramesInput)
             return "input";
         else if (skipN == m_kSkipFramesSR)
-            return "sr";
+            return s + "";  // to ensure SR output comes before FG output in filesystem.
         else if (skipN == m_kSkipFramesFG)
-            return "fg";
+            return s + "_fg";
         else
             return "WRONG";
-    }();
+    }(hackOptions.modeString);
 
-    size_t outputCount = hackOptions.enableHack ? hackOptions.outputMaxCount : 15;
+    size_t outputCount = hackOptions.enableHack ? hackOptions.outputFrameCount : 15;
     
-    if (frameID < skipN + outputCount || frameID >= 2 * outputCount + skipN)
+    if (frameID < skipN || frameID >= outputCount + skipN)
     //if (frameID >= outputCount)
         return true;
-    frameID -= skipN + outputCount;
+    frameID -= skipN;
+    frameID += hackOptions.baseFrameIndex;
 
     const ResourceState resourceState = SDKWrapper::GetFrameworkState(static_cast<FfxResourceStates>(debugResource.state));
     const TextureDesc   textureDesc   = SDKWrapper::GetFrameworkTextureDescription(debugResource.description);
@@ -977,11 +965,11 @@ bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, cons
         StringToWString(customName).c_str(), debugResource.resource, &textureDesc, resourceState);
     
     std::filesystem::path outputPath(hackOptions.outPath != L"" ? hackOptions.outPath : L"../media/TEST_SCENE/outputs");
-    // construct the full filename as <output_dir>/<identifier>_<frame_id formatted to 3 digits>.exr
+    // construct the full filename as <output_dir>/<identifier>_<frame_id formatted to 4 digits>_<suffix>.exr
     std::string idString = std::to_string(frameID);
     std::string filename = 
         (customName == "" ? hackOptions.identifier : customName) + "_" + 
-        std::string(3 - idString.length(), '0') + idString + suffix + ".exr";
+        std::string(4 - idString.length(), '0') + idString + "_" + suffix + ".exr";
     outputPath.append(filename);
     // Adapted from SwapChain::DumpAllToFile()
     {
@@ -1084,7 +1072,6 @@ bool FSRRenderModule::ExportDebugFrame2Inputs(
     const size_t skipN, 
     std::string customName)
 {
-    const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
     size_t      frameID     = GetFramework()->GetFrameID();
 
     /// When calling at the end of Execute(), we skip frames to align with actual displayed frame.
@@ -1108,7 +1095,7 @@ bool FSRRenderModule::ExportDebugFrame2Inputs(
             return "WRONG";
     }();
 
-    size_t outputCount = hackOptions.enableHack ? hackOptions.outputMaxCount : 15;
+    size_t outputCount = hackOptions.enableHack ? hackOptions.outputFrameCount : 15;
 
     if (frameID < skipN + outputCount || frameID >= 2 * outputCount + skipN)
         return true;
@@ -1389,6 +1376,25 @@ void FSRRenderModule::UpdatePreset(const int32_t* pOldPreset)
         m_UpscaleRatio = 3.0f;
         break;
     case FSRScalePreset::Custom:
+        if (hackOptions.enableHack)
+        {
+            const auto& resInfo = GetFramework()->GetResolutionInfo();
+            /// Guard of inconsistent aspect ratio: expand render res instead of crop
+            /// E.g. 480x360 upscale to 960x540, (4:3 to 16:9), we want to set render res to 640x360
+            /// instead of 480x270
+            m_UpscaleRatio = std::min(resInfo.GetDisplayWidthScaleRatio(), resInfo.GetDisplayHeightScaleRatio());
+            CauldronAssert(ASSERT_CRITICAL,
+                           m_UpscaleRatio >= 1.f,
+                           L"display (%d, %d) can't be smaller than render (%d, %d)",
+                           resInfo.DisplayWidth,
+                           resInfo.DisplayHeight,
+                           resInfo.RenderWidth,
+                           resInfo.RenderHeight);
+            // With upscale ratio, we set the "fake tag" to be the preset with ratio closest to our ratio
+            auto preset = FindMatchingPreset();
+            const_cast<std::string&>(hackOptions.modeString) = std::string(magic_enum::enum_name(preset));
+            break;
+        }
     default:
         // Leave the upscale ratio at whatever it was
         break;
@@ -1862,12 +1868,21 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
     FfxApiResource backbuffer            = SDKWrapper::ffxGetResourceApi(pSwapchainBackbuffer, FFX_API_RESOURCE_STATE_PRESENT);
     
     // copy input source to temp so that the input and output texture of the upscalers is different 
+    auto hasSameSize = [](const TextureDesc& desc1, const TextureDesc& desc2) {
+        return desc1.Width == desc2.Width && desc1.Height == desc2.Height;
+    };
     const auto& colorDesc = m_pColorTarget->GetDesc();
     const auto& tempDesc  = m_pTempTexture->GetDesc();
-    if (GetFramework()->GetConfig()->HackOptions.enableHack)
-        const auto& hackDesc  = m_pHackColors[0]->GetDesc();
     const auto& mvDesc    = m_pMotionVectors->GetDesc();
     const auto& depthDesc = m_pDepthTarget->GetDesc();
+    if (hackOptions.enableHack)
+    {
+        const auto& hackColorDesc = m_pHackColors[0]->GetDesc();
+        const auto& hackMVDesc    = m_pHackMVs[0]->GetDesc();
+        const auto& hackDepthDesc = m_pHackDepths[0]->GetDesc();
+        
+        bool check = hasSameSize(colorDesc, hackColorDesc) && hasSameSize(mvDesc, hackMVDesc) && hasSameSize(depthDesc, hackDepthDesc);
+    }
     {
         std::vector<Barrier> barriers;
         barriers.push_back(Barrier::Transition(
@@ -1897,14 +1912,13 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
     // If they become changeable at runtime, we'll need to modify how this information is queried
     static bool s_InvertedDepth = GetConfig()->InvertedDepth;
 
-    const auto& hackOptions = GetFramework()->GetConfig()->HackOptions;
-    // use this to temporarily define export-related varaibles when hack is off but you want export.
+    // use this to temporarily define export-related variables when hack is off but you want export.
     if (!hackOptions.enableHack)
     {
-        const_cast<CauldronConfig::HackOptionDef&>(hackOptions).storeOutput    = false;
-        const_cast<CauldronConfig::HackOptionDef&>(hackOptions).outputMaxCount = 15;
-        const_cast<CauldronConfig::HackOptionDef&>(hackOptions).identifier     = "DefaultSceneBB";
-        const_cast<CauldronConfig::HackOptionDef&>(hackOptions).outPath        = L"../media/EmptySanityCheck/Horizontal/outputs";
+        const_cast<HackOptionDef&>(hackOptions).storeOutput    = false;
+        const_cast<HackOptionDef&>(hackOptions).outputFrameCount = 15;
+        const_cast<HackOptionDef&>(hackOptions).identifier     = "DefaultSceneBB";
+        const_cast<HackOptionDef&>(hackOptions).outPath        = L"../media/EmptySanityCheck/Horizontal/outputs";
     }
     uint64_t hackIdx = 0;
     if (hackOptions.enableHack)
@@ -2042,12 +2056,12 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         ffx::ReturnCode retCode = ffx::Dispatch(m_UpscalingContext, dispatchUpscale);
         CauldronAssert(ASSERT_CRITICAL, !!retCode, L"Dispatching FSR upscaling failed: %d", (uint32_t)retCode);
     
-        // After SR but before FG, we can look at SR output.
-        if (false) // manually turn on/off
+        // Shall we export both SR and FG frames or only FG?
+        if (hackOptions.storeOutput)
         {
             //bool exportSuccess = ExportDebugFrame(dispatchUpscale.motionVectors, m_kSkipFramesInput, "OriginalMV");
-            bool exportSuccess = ExportDebugFrame(dispatchUpscale.output, m_kSkipFramesSR, "SR_Outputs");
-            CauldronAssert(ASSERT_ERROR, exportSuccess, L"export MV and Depth failed");
+            bool exportSuccess = ExportDebugFrame(dispatchUpscale.output, m_kSkipFramesSR);
+            CauldronAssert(ASSERT_ERROR, exportSuccess, L"export SR frames failed");
         }
     }
 
@@ -2250,6 +2264,7 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         {
             // frameID check is done in export function
             bool exportSuccess = ExportDebugFrame(dispatchFg.outputs[0], m_kSkipFramesFG);
+            CauldronAssert(ASSERT_ERROR, exportSuccess, L"export FG frames failed");
         }
 
         // Other than saving FG frames, we can look at any resources used by FG, see SRV_debug at top of the file.
@@ -2384,7 +2399,7 @@ void RestoreApplicationSwapChain(bool recreateSwapchain)
     {
         cauldron::GetSwapChain()->GetImpl()->SetDXGISwapChain(nullptr);
 
-        // safe data since release will destroy the swapchain (and we need it distroyed before we can create the new one)
+        // safe data since release will destroy the swapchain (and we need it destroyed before we can create the new one)
         HWND windowHandle = pSwapchain->GetImpl()->DX12SwapChainDesc().OutputWindow;
         DXGI_SWAP_CHAIN_DESC1 desc1 = pSwapchain->GetImpl()->DX12SwapChainDesc1();
         DXGI_SWAP_CHAIN_FULLSCREEN_DESC  fsDesc = pSwapchain->GetImpl()->DX12SwapChainFullScreenDesc();
