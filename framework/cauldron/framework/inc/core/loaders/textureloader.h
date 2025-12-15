@@ -227,34 +227,33 @@ namespace cauldron
 
         EXRTextureDataBlock()
             : TextureDataBlock() {};
+        EXRTextureDataBlock(char* rawData)
+            : TextureDataBlock()
+            , m_pData(rawData) {};
         virtual ~EXRTextureDataBlock();
 
+        /// @brief Should NOT be called.
         virtual bool LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
 
         virtual void CopyTextureData(void* pDest, uint32_t stride, uint32_t widthStride, uint32_t height, uint32_t sliceOffset) override;
 
         /**
-         * @brief   Loads motion vectors or depth from a FIXED 1k jitter EXR file (RG=motion vectors, B=depth)
+         * @brief Load frame buffer color data from a EXR file.
          * 
-         * @param textureFile    Path to the EXR file
-         * @param alphaThreshold Unused parameter (retained for signature compatibility)
-         * @param texDesc        Output texture description
-         * @param channelType    Specifies whether to load motion vectors or depth
-         * 
-         * @return               If loading succeeded
+         * @param exrPaths Path to the EXR file
+         * @return Success or not
          */
-        bool LoadJitterData1K(std::filesystem::path& textureFile, 
-                              float alphaThreshold, 
-                              TextureDesc& texDesc,
-                              SpecialChannelType channelType);
+        bool LoadColorData(const std::filesystem::path& textureFile);
 
         /**
-         * @brief   Sets the resource format to that in the swapchain.
-         * @param format Should be one of the following, already be set by SwapChain creation:
-         * RGBA8_UNORM, RGB10A2_UNORM, or RGBA16_FLOAT.
+         * @brief Loads motion vectors and depth from a EXR file (RG=motion vectors, B=depth).
          * 
+         * MV data are stored in self, depth data are returned as a new EXRTextureDataBlock.
+         * 
+         * @param textureFile    Path to the EXR file
+         * @return a new EXRTextureDataBlock shared_ptr storing depth data.
          */
-        void SetResourceFormat(ResourceFormat format) { m_Format = format; }
+        std::shared_ptr<EXRTextureDataBlock> LoadMVandCreateDepth(const std::filesystem::path& textureFile);
 
         /**
          * @brief Given a list of all exr file paths, extract jitter from filename and store to output vector
@@ -271,7 +270,6 @@ namespace cauldron
     private:
         char*  m_pData    = nullptr;  // EXR uses float*, but it will cause error
         // Necessary because we supports 3 formats, must be known before LoadTextureData()
-        ResourceFormat m_Format = ResourceFormat::Unknown;
     };
 
     /**

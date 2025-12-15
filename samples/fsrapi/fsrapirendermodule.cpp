@@ -155,34 +155,25 @@ bool FSRRenderModule::LoadHackTextures()
 {
     // first do a sanity check on those paths in HackOptions
     for (const auto& inPath : hackOptions.hackPaths)
-    {
-        CauldronAssert(ASSERT_ERROR, fs::exists(inPath), 
-            L"Input folder %s deosn't exist", inPath.c_str());
+        CauldronAssert(ASSERT_ERROR, fs::exists(inPath), L"Input folder %s deosn't exist", inPath.c_str());
 
-    }
-    if (!fs::exists(hackOptions.outPath))
-    {
+    if (hackOptions.storeOutput && !fs::exists(hackOptions.outPath)) {
         // Defensive, in case path doesn't exist
         CauldronWarning(L"Screenshot output dir DNE and will be created: %s", hackOptions.outPath.c_str());
         fs::create_directory(hackOptions.outPath);
     }
 
-    std::vector<std::wstring>       textureLoadPaths  = hackOptions.hackPaths;
-    // TODO: remove the duplicate 3rd element after refactoring MVD load
-    textureLoadPaths.push_back(textureLoadPaths.back());
-    const std::vector<std::wstring> renderTargetNames = {L"CurrFrameHack", L"MvHack", L"DepthHack"};
+    constexpr std::array<wchar_t*, 3> renderTargetNames = {L"CurrFrameHack", L"MvHack", L"DepthHack"};
     // temporarily used
     std::vector<std::vector<cauldron::Texture*>*> hackTargets = {&m_pHackColors, &m_pHackMVs, &m_pHackDepths};
 
     std::vector<std::filesystem::path> exrFiles;
 
-    size_t       nTextures;
-    std::wstring rtFullname;
-
+    size_t nTextures = hackOptions.outputFrameCount; // No. textures to load and run on.
     // Populate exr filepath lists and return count
     auto populatePathList = [](std::wstring folderPath, std::vector<std::filesystem::path>& outPaths) -> size_t {
         outPaths.clear();
-        for (const auto& entry : filesystem::directory_iterator(folderPath))
+        for (const auto& entry : std::filesystem::directory_iterator(folderPath))
         {
             if (entry.path().extension() == ".exr")
                 outPaths.push_back(entry.path());
@@ -193,69 +184,68 @@ bool FSRRenderModule::LoadHackTextures()
         return outPaths.size();
     };
 
-    for (int typeIdx=0; typeIdx<3; ++typeIdx)
+    // Load Color
     {
-        // 0: ColorRGB, 1: MotionVectors, 2: Depth
-        auto type = static_cast<EXRTextureDataBlock::SpecialChannelType>(typeIdx);
-
-        // grab all exr files of current input type, parse jitter if reading ColorRGB
-        bool parseJitter = hackOptions.parseJitter && 
-                           type == EXRTextureDataBlock::SpecialChannelType::ColorRGB;
-
-        nTextures        = populatePathList(textureLoadPaths[typeIdx], exrFiles);
-        CauldronAssert(ASSERT_CRITICAL, nTextures == hackOptions.frameCount, 
-                       L"No. input files counted by EXRTextureDataBlock::ParseJitter() (%d) and lambda function (%d) don't match.",
-                       nTextures, hackOptions.frameCount);
-        if (parseJitter)
+        if (populatePathList(hackOptions.hackPaths.front(), exrFiles) != hackOptions.frameCount)
+            CauldronError(L"Color input file count mismatch with hackOptions.frameCount");
+        if (hackOptions.parseJitter)
             EXRTextureDataBlock::ParseJitter(exrFiles, m_pHackJitterXY);
 
-        /// NOTE: hackOptions.frameCount is the fixed total number of frames in the testdata folder,
-        /// but user can set a smaller hackOptions.outputFrameCount to check in test runs.
-        nTextures = hackOptions.outputFrameCount;
+        TextureDesc dummyDesc = {};
         for (size_t frameIdx = 0; frameIdx < nTextures; ++frameIdx)
         {
-            rtFullname = renderTargetNames[typeIdx] + L"_" + std::to_wstring(frameIdx);
-            TextureLoadInfo textureInfo(exrFiles[frameIdx]);
-
-            // NOTE, m_UpscaleRatio is display res / render res, controlled by m_CurScale.
-            auto textureDB = std::make_unique<EXRTextureDataBlock>();
-            if (type == EXRTextureDataBlock::SpecialChannelType::ColorRGB)
-            {
-                textureDB->SetResourceFormat(GetFramework()->GetSwapChain()->GetSwapChainFormat());
-            }
-            TextureDesc textureDesc = {};
-
             // first get the render target
-            hackTargets[typeIdx]->push_back(const_cast<cauldron::Texture*>(GetFramework()->GetRenderTexture(rtFullname.c_str())));
-            CauldronAssert(ASSERT_CRITICAL, hackTargets[typeIdx]->back() != nullptr, L"Hack render target %s GetRenderTexture() failed", rtFullname.c_str());
+            std::wstring rtFullname = renderTargetNames[0] + (L"_" + std::to_wstring(frameIdx));  // can't add 2 wchar_t*
+            m_pHackColors.push_back(const_cast<cauldron::Texture*>(GetFramework()->GetRenderTexture(rtFullname.c_str())));
+            CauldronAssert(ASSERT_ERROR, m_pHackColors.back() != nullptr, L"GetRenderTexture() on %s failed", rtFullname.c_str());
 
-            // load
-            bool loaded = false;
-            if (type == EXRTextureDataBlock::SpecialChannelType::ColorRGB)
-            {
-                loaded = textureDB->LoadTextureData(textureInfo.TextureFile, textureInfo.AlphaThreshold, textureDesc);
-            }
-            else
-            {
-                loaded = textureDB->LoadJitterData1K(textureInfo.TextureFile, textureInfo.AlphaThreshold, textureDesc, type);
-            }
-            CauldronAssert(ASSERT_CRITICAL, loaded, L"Hack texture %s loaded failed", textureLoadPaths[typeIdx].c_str());
+            // create texture DB
+            auto colorDB = std::make_unique<EXRTextureDataBlock>();
+            //colorDB->SetResourceFormat(GetFramework()->GetSwapChain()->GetSwapChainFormat());
+            colorDB->LoadColorData(exrFiles[frameIdx]);
+            
             // then copy
-            hackTargets[typeIdx]->back()->CopyData(textureDB.get());
+            m_pHackColors.back()->CopyData(colorDB.get());
+        }
 
-        }  // end of each texture
-    }  // end of all textures of one type
+        CauldronAssert(ASSERT_ERROR, m_pHackColors.size() == nTextures, L"Color hack target count mismatch");
+    }
+
+    // Load MV and Depth together
+    {
+        if (populatePathList(hackOptions.hackPaths.back(), exrFiles) != hackOptions.frameCount)
+            CauldronError(L"MVD input file count mismatch with hackOptions.frameCount");
+
+        for (size_t frameIdx = 0; frameIdx < nTextures; ++frameIdx)
+        {
+            // first get both render targets
+            std::wstring mvRTName    = renderTargetNames[1] + (L"_" + std::to_wstring(frameIdx));
+            std::wstring depthRTName = renderTargetNames[2] + (L"_" + std::to_wstring(frameIdx));
+            m_pHackMVs.push_back(const_cast<cauldron::Texture*>(GetFramework()->GetRenderTexture(mvRTName.c_str())));
+            m_pHackDepths.push_back(const_cast<cauldron::Texture*>(GetFramework()->GetRenderTexture(depthRTName.c_str())));
+            CauldronAssert(ASSERT_ERROR, m_pHackMVs.back() != nullptr, L"GetRenderTexture() on %s failed", mvRTName.c_str());
+            CauldronAssert(ASSERT_ERROR, m_pHackDepths.back() != nullptr, L"GetRenderTexture() on %s failed", depthRTName.c_str());
+
+            // create texture DB
+            auto mvDB = std::make_unique<EXRTextureDataBlock>();
+            auto depthDB = mvDB->LoadMVandCreateDepth(exrFiles[frameIdx]);
+
+            // then copy
+            m_pHackMVs.back()->CopyData(mvDB.get());
+            m_pHackDepths.back()->CopyData(depthDB.get());
+        }
+
+        CauldronAssert(ASSERT_ERROR, m_pHackMVs.size() == nTextures && m_pHackDepths.size() == nTextures, L"MVD hack target count mismatch");
+    }
 
     //CheckHackColors("AfterLoad");
 
-    // Ensure all exr inputs have same resolution and force write
+    // Ensure all exr inputs have same resolution and force write to Framework resolution info (render res)
     const auto& allSeenResolution = EXRTextureDataBlock::AllSeenResolution;
-    if (allSeenResolution.size() != 1)
-    {
+    if (allSeenResolution.size() != 1) {
         // log then abort
         CauldronWarning(L"Input data don't have consistent resolution");
-        for (const auto& [res, pathStr] : allSeenResolution)
-        {
+        for (const auto& [res, pathStr] : allSeenResolution) {
             CauldronWarning(L"%s: [%d, %d]", pathStr.c_str(), res.first, res.second);
         }
         CauldronError(L"FSRRenderModule::LoadHackTextures() ABORT");
