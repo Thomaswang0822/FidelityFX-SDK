@@ -5,8 +5,10 @@
 This repo is cloned from AMD's [FidelityFX SDK version 1.1.4](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/tree/c6efa6bf7f2027b3ec94f28578bb5965eabb9e55). Note that this is an older version SDK with commit date May 8, 2025. The latest version
 as of August 2025 is version 2.0.0, which fundamentally changed the project structure and hide a large portion of source code.
 
+***In the future*** we will rebase our code onto latest FSR release.
+
 The project builds a full power sample app which consists of many Render Modules (RM, Nvidia calls them Render Passes). Relevant changes were
-made in only 2 locations:
+made mostly in 2 locations:
 
 - FSR API Render Module: located in [**samples/fsrapi**](samples/fsrapi/CMakeLists.txt)
 - Texture Loader: located in [**framework/cauldron/framework/[inc | src]/core/loaders**](framework/cauldron/framework/inc/core/loaders/textureloader.h)
@@ -29,15 +31,15 @@ Finally, you get a VS solution in **\<Project Root\>/build**
 
 ### Prepare Test Inputs
 
-Ask TODO杨博文 for our test inputs. It should be a folder (or many folders, each being a test scene) with 5 subfolders: **MVD_JI, NPP_GT, NPP_JI, YPP_GT, YPP_GI**. Put it under media or other designated locations.
+Ask <bowen.yang> for our test inputs. It should be a folder (or many folders, each being a test scene) with at least 3 subfolders: **MVD_JI, NPP_GT, NPP_JI**. Put it under media or other designated locations.
 
 ### Build Solution in VS
 
-Make sure the startup project is "FFX_API_FSR": it should be **bold** in the Solution Explorer. Then to debug, use VS button "Local Windows Debugger"; to run, use "Start Without Debugging" (Ctrl + F5) or simply click **FFX_API_FSR_DX12D.exe** in **bin/**. This assumes no Cmdline args are passed.
+Make sure the startup project is "FFX_API_FSR": it should be **bold** in the Solution Explorer. Then to debug, use VS button "Local Windows Debugger". But make sure you read the following section and properly set up the cmdline args or json config file before debugging.
 
 ### Runtime Options Setup
 
-We inherit the SDK's recommended way to set up runtime options: through json configuration files. Our hack/test related options are located in [**cauldronconfig.json**](framework/cauldron/framework/config/cauldronconfig.json) under `HackOptions` field.
+We inherit both ways from the SDK to set up runtime options: through json configuration files and through cmdline args. Our hack/test related options lives in [**cauldronconfig.json**](framework/cauldron/framework/config/cauldronconfig.json) under `HackOptions` field.
 
 We have the following options:
 
@@ -50,12 +52,12 @@ We have the following options:
   - A single relative path to the scene testdata root, e.g. *"../media/TEST_SCENE"*. The paths to frame color data and MVD data (encoded MVs and Depths) will be constructed automatically by appending "NPP_JI" and "MVD_JI" respectively, which are the defaults when UE generates testdata.
   - A pair of relative paths to the color data and MVD data. In json config file they are a list `"HackPaths": [<color path>, <MVD path>]`. In cmdline they are spaced: `-HackPaths <color path> <MVD path>`.
 - [Optional] StoreOutput: whether to export SR and SR+FG output frames to .exr files, default false.
-- [Optional] OutputFrameCount: number of frames to load and run on. When not given or the given value is larger than total .exr file count in color input path, default to this value to run on all frames.
+- [Optional] OutputFrameCount: number of frames to load and run on. When not given or the given value is larger than total .exr file count in color input path, default to this value to run on all frames. ***It is used for debug ONLY**
 - [Optional **if StoreOutput not given**] OutputPath: a relative path to the exported frames folder, e.g. *"../media/TEST_SCENE/outputs"*. We recommend using an output folder in the testdata root.
-- [Optional] AlignFilename: if set, export filenames will be in order when put together with the reference result (should be in *NPP_GT*). A (reference, SR output, FG output) triplet would look like (*NPP_beauty_2472.exr, NPP_beauty_2472_Quality.exr, NPP_beauty_2472_Quality_fg.exr*). This helps looking at them in "chronological order" with image viewer. When false, the frameID in the export filenames will start from 0000.
+- [Optional] AlignFilename: if set, export filenames will be in order when put together with the reference result (should be in *NPP_GT*). A (reference, SR output, FG output) triplet would look like (*NPP_beauty_2472.exr, NPP_beauty_2472_Quality.exr, NPP_beauty_2472_Quality_fg.exr*). This helps looking at them in "chronological order" with image viewer. And after copying *NPP_GT* reference images to *OutputPath*, it would be convenient to compare results frame by frame in an image viewer. When false, the frameID in the export filenames will start from 0000.
 - [Optional] Identifier: a custom identifier for export filenames. If not given or AlignFilename is set to true, it will be the common prefix of all color data, e.g. *NPP_beauty*.
 
-Cmdline parsing of those hack-related runtime options is also provided. It would become useful when you have multiple launches of different scenes, (otherwise you likely need to change the input and output paths in the config file for each scene.)
+Cmdline parsing of those hack-related runtime options is also provided. It would become useful when you have multiple launches of different scenes with a script, otherwise you need to change the input and output paths in the config file for each scene.
 
 All bool options should be a single **-OptionName**, and other options should be a **-OptionName OptionValue** pair. A typical full command looks like:
 
@@ -94,28 +96,19 @@ Both DLSS and AMD's FSR **internally** determine render resolution based on user
 But we want to specify both render and display resolution, and stop FSR from resizing render resolution to the value it computes. Thus, the hack is to force the mode to `Custom` and compute the custom ratio b/w display resolution (from "-DisplayResolution")
 and render resolution (from the input image resolution). It is valid because this `FSRScalePreset` is solely used to compute the upscale ratio. In DLSS, this is a bit more complicated because a similar `enum class DLSSMode` is tightly binded to the pipeline and thus we have to set it carefully.
 
-BTW, don't worry about not having 4k monitor when you want to test 4k, as the app window will scale properly and you will get 4K export.
+BTW, for FSR3 don't worry about not having 4k monitor when you want to test 4k, as the app window will scale properly and you will get 4K export.
 
 ### Inputs format
 
-The detailed specification of the inputs can be found on TODO. In short, each frame has 2 input exr files: one is the frame capture, the other is encoded motion vectors (2d, in RG channel) and Gbuffer depths (1d, in B channel).
+The detailed specification of the inputs can be found on [Our Confluence page: MTSS UE Dataset](https://confluence.mthreads.com/display/SWPM/MTSS+UE+Dataset). In short, each frame has 2 input exr files: one is the frame capture, the other is encoded motion vectors (2d, in RG channel) and Gbuffer depths (1d, in B channel).
 
 If in the future, we need new inputs, make sure to double check the loading functions.
 
 - For exr files, it's in `EXRTextureDataBlock`
 - For common LDR formats (like jpg, png, etc.) that can be handled by **stb_image**, use `WICTextureDataBlock`.
-- For other yet to be handled formats, like .hdr, similar class extending `TextureDataBlock` like the 2 above is needed.
+- For other formats not supported yet, like .hdr, similar class extending `TextureDataBlock` like the 2 above is needed.
 
 Please be very careful on other input format details, like whether tone mapping, normalization, etc. have been applied, and change the loader code accordingly.
-
-### View Results
-
-When the App is up, there will be 3 imgui control panels. Use F2 and F3 to close 2 unrelated. In the F1 window, you can:
-
-- "effectively" turn off SR, by setting TODO to **NativeAA**, which is 1.0, no upscale. We cannot really turn off SR, because we hack the input to SR and FG will use the original render output if SR is turned off completely.
-- turn of FG, by unchecking the TODO box.
-- view interploated/generated frame only, by checking the TODO box.
-- view the debug views, by checking the TODO box. This is very helpful. The top-left region is motion vectors and top-mid region is depths.
 
 ## Key Concepts
 
@@ -148,7 +141,7 @@ else
 }
 ```
 
-As shown in the code above, by "hack" we didn't mean to overwrite the data managed by `m_pTempTexture`, `m_pDepthTarget`, and `m_pMotionVectors`. Instead, when we bind them as input to the Upscale dispatch, we use our targets instead. This ensures our hacking is non-destructive.
+As shown in the code above, by "hack" we didn't mean to overwrite the data managed by `m_pTempTexture`, `m_pDepthTarget`, or `m_pMotionVectors`. Instead, when we bind them as input to the Upscale dispatch, we use our targets instead. This ensures our hacking is non-destructive.
 
 If we have more supportive data to be used, we just follow the same logic: create additional render targets to store inputs, replace appropriate targets with our own at dispatch binding time. Here are all existing render targets and our additional targets stored in [**fsrapirendermodule.h**](samples/fsrapi/fsrapirendermodule.h). The vector size will be the frame number in the test scene.
 
@@ -171,6 +164,6 @@ std::vector<std::pair<float, float>> m_pHackJitterXY    = {};
 
 ### Texture format
 
-This is not [inputs format](#inputs-format), but **how the SDK stores texture/buffer data in bytes**. There is a big `enum ResourceFormat` in [**renderdefines.h**](framework/cauldron/framework/inc/render/renderdefines.h) defining this carefully. See the comments there for details.
+This is not [inputs format](#inputs-format), but **how the SDK stores texture/buffer data in bytes**. There is a big `enum class ResourceFormat` in [**renderdefines.h**](framework/cauldron/framework/inc/render/renderdefines.h#208) defining this carefully. See the comments there for details.
 
-Thus, when changing or adding to the texture loader code, make your the byte arrangement is consistent to the texture format.
+Thus, when changing or adding to the texture loader code, make your the byte arrangement consistent to the texture format.

@@ -97,12 +97,12 @@
             "EnableHack": true,
             "DisplayResolution": 1,
             "HackPathssssss": [
-                "../media/EmptySanityCheck/Horizontal/NPP_JI_selection",
-                "../media/EmptySanityCheck/Horizontal/MVD_JI"
+                "../media/EmptySanityCheck60/Vertical",
+                "../media/EmptySanityCheck60/Vertical/outputs"
             ],
             "HackPaths": "../media/TEST_SCENE",
             "ParseJitter": true,
-            "StoreOutput": true,
+            "StoreOutput": false,
             "OutputPath": "../media/TEST_SCENE/outputs",
             "OutputFrameCount": 15,
             "AlignFilename": true,
