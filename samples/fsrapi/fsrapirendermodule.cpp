@@ -928,14 +928,18 @@ bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, cons
 {
     size_t      frameID     = m_FrameID;
 
-    /// When calling at the end of Execute(), we skip frames to align with actual displayed frame.
-    /// For FG, this is 3
-    /// Frame 0 and 1 are empty;
-    /// Frame 2 are not-yet interpolated real frame 0
+    /// There will be several frames of delay before SR pass and FG pass finish writing result to the
+    /// FfxApiResource here. So we need to shift frameID accordingly.
+    /// 
+    /// For FG, this is 3. It has been observed that if frameID is in {0, 1, 2},
+    /// 0 and 1: FfxApiResource is empty;
+    /// 2: FfxApiResource stores upscaled but not-yet interpolated data of input frame 0.
+    /// i.e. We feed data of input frame 0 at frameID == 0, but read the FG result of input frame 0 at frameID == 3.
+    /// NOTE: here we never use a polluted frame history.
     /// 
     /// For SR (before FG), this is 1
     /// 
-    /// For inputs (actual API resource to bind inputs, instead of our Debug resources), no skip
+    /// For inputs (when we want to look at "what I binded to the pass inputs?"), no skip
     ///  
     /// hackOptions.storeOutput should be checked before calling
     
@@ -953,10 +957,15 @@ bool FSRRenderModule::ExportDebugFrame(const FfxApiResource& debugResource, cons
 
     size_t outputCount = hackOptions.enableHack ? hackOptions.outputFrameCount : 15;
     
+    /// E.g. For a 120-frame scene, the app will run for 123 frames. 
+    /// To capture SR frames, we will call this export function for frameID in [1, 120]
+    /// To capture FG frames, we will call this export function for frameID in [3, 122]
     if (frameID < skipN || frameID >= outputCount + skipN)
-    //if (frameID >= outputCount)
         return true;
+
+    // After this line, frameID matches the frame of input data used by the SR/FG pass.
     frameID -= skipN;
+    // Then align filenames
     frameID += hackOptions.baseFrameIndex;
 
     const ResourceState resourceState = SDKWrapper::GetFrameworkState(static_cast<FfxResourceStates>(debugResource.state));
@@ -2056,7 +2065,7 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         ffx::ReturnCode retCode = ffx::Dispatch(m_UpscalingContext, dispatchUpscale);
         CauldronAssert(ASSERT_CRITICAL, !!retCode, L"Dispatching FSR upscaling failed: %d", (uint32_t)retCode);
     
-        // Shall we export both SR and FG frames or only FG?
+        // We export both SR and FG frames.
         if (hackOptions.storeOutput)
         {
             //bool exportSuccess = ExportDebugFrame(dispatchUpscale.motionVectors, m_kSkipFramesInput, "OriginalMV");
@@ -2256,15 +2265,9 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         CauldronAssert(ASSERT_CRITICAL, !!retCode, L"Dispatching Frame Generation failed: %d", (uint32_t)retCode);
         if (hackOptions.storeOutput)
         {
-            bool exportSuccess = ExportDebugFrame(dispatchFg.outputs[0], m_kSkipFramesFG);
-            CauldronAssert(ASSERT_CRITICAL, exportSuccess, L"Export failed at frame %d", GetFramework()->GetFrameID());
-        }
-
-        if (hackOptions.storeOutput)
-        {
             // frameID check is done in export function
             bool exportSuccess = ExportDebugFrame(dispatchFg.outputs[0], m_kSkipFramesFG);
-            CauldronAssert(ASSERT_ERROR, exportSuccess, L"export FG frames failed");
+            CauldronAssert(ASSERT_CRITICAL, exportSuccess, L"Export failed at frame %d", GetFramework()->GetFrameID());
         }
 
         // Other than saving FG frames, we can look at any resources used by FG, see SRV_debug at top of the file.
@@ -2299,6 +2302,12 @@ finishup:
 
     // We are now done with upscaling
     GetFramework()->SetUpscalingState(UpscalerState::PostUpscale);
+
+    // If store output in hack mode, should early close
+    if (hackOptions.storeOutput && m_FrameID >= hackOptions.outputFrameCount + m_kSkipFramesFG)
+    {
+        GetFramework()->GetMutableImpl()->SetShouldQuit();
+    }
 }
 
 void FSRRenderModule::PreTransCallback(double deltaTime, CommandList* pCmdList)

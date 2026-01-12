@@ -431,6 +431,7 @@ namespace cauldron
          * @brief   Internal implementation accessor.
          */
         const FrameworkInternal* GetImpl() const { return m_pImpl; }
+        FrameworkInternal* GetMutableImpl() const { return m_pImpl; }
 
         /**
          * @brief   ParseSampleConfig(). Override in sample to modify application configuration.
