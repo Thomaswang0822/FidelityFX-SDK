@@ -16,13 +16,12 @@ This project reads in our test inputs, including frame capture, motion vectors, 
 
 ## How to Build
 
-You may follow the same instruction as specified in the FidelityFX README. For the interactive options when running the build-solution script, we recommend the following:
+For ease of deveoplment, we created a [**BuildFullSolutionDX12.bat** script](BuildFullSolutionDX12.bat) which
 
-- Support runtime shader recompile? No
-- Build the SDK as DLL? No
-- Enter numbers of which samples to build. 1 (All), though 8 (FSR) should suffice
+- Auto select the correct build options for you.
+- Include the entire SDK (that is, +`ffx-api` code) into the generated VS solution, such that you can read, modify, and build your changes to these low-evel api files all in VS. Originally, they are built as .dll or .lib in CMake stage and directly included into VS solution.
 
-Note that [**UpdateMedia.bat**](UpdateMedia.bat) needs to be run first, which simply downloads a large (around 5GB) media folder containing all scene descriptions. It is still needed by the parts of the pipeline we didn't change before SR and FG.
+Note that [**UpdateMedia.bat**](UpdateMedia.bat) needs to be run first, which simply downloads a large (around 5GB) media folder containing all scene descriptions. It is still needed by the parts of the pipeline we didn't change before SR and FG (traditional rendering steps).
 
 Finally, you get a VS solution in **\<Project Root\>/build**
 

@@ -2299,6 +2299,12 @@ finishup:
 
     // We are now done with upscaling
     GetFramework()->SetUpscalingState(UpscalerState::PostUpscale);
+
+    // If store output in hack mode, should early close
+    if (hackOptions.storeOutput && m_FrameID >= hackOptions.outputFrameCount + m_kSkipFramesFG)
+    {
+        GetFramework()->GetMutableImpl()->SetShouldQuit();
+    }
 }
 
 void FSRRenderModule::PreTransCallback(double deltaTime, CommandList* pCmdList)

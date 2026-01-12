@@ -57,6 +57,12 @@ namespace cauldron
         const HWND GetHWND() const { return m_WindowHandle; }
         const PresentationMode GetPresentationMode() const { return m_PresentationMode; }
 
+        inline void SetShouldQuit()
+        {
+            PostQuitMessage(0);
+            m_Quitting = true;
+        }
+
     private:
         FrameworkInternal() = delete;
 
