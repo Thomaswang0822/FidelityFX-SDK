@@ -158,6 +158,13 @@ namespace cauldron
             outPath = (std::filesystem::path(hackPaths[0]).parent_path() / "outputs").wstring();
         }
 
+        if (!std::filesystem::exists(outPath))
+        {
+            // Defensive, in case path doesn't exist
+            CauldronWarning(L"Output dir DNE and will be created: %s", outPath.c_str());
+            std::filesystem::create_directory(outPath);
+        }
+
         // Set frameCount to MVD count
         frameCount = static_cast<size_t>(std::count_if(
             std::filesystem::directory_iterator(hackPaths[1]), 

@@ -238,7 +238,12 @@ private:
     cauldron::ResolutionInfo UpdateResolution(uint32_t displayWidth, uint32_t displayHeight);
     void                     UpdateFSRContext(bool enabled);
 
-    bool                     LoadHackTextures();
+    /**
+     * Populate m_hackColorPaths, m_hackMVDPaths, and m_pHackJitterXY.
+     * 
+     * \return 
+     */
+    bool                     LoadHackTextureInfo();
 
     cauldron::UIRenderModule*   m_pUIRenderModule = nullptr;
     cauldron::ResourceView*     m_pRTResourceView = nullptr;
@@ -282,7 +287,7 @@ private:
     bool m_DrawFrameGenerationDebugTearLines        = false;
     bool m_DrawFrameGenerationDebugResetIndicators  = false;
     bool m_DrawFrameGenerationDebugPacingLines      = false;
-    bool m_DrawFrameGenerationDebugView             = true;
+    bool m_DrawFrameGenerationDebugView             = false;
     bool m_DrawUpscalerDebugView                    = false;
     bool m_PresentInterpolatedOnly                  = true;
     bool m_SimulatePresentSkip                      = false;
@@ -325,9 +330,12 @@ private:
     cauldron::Texture* m_pHackDepth       = nullptr;
     // finally the data storage
     std::vector<std::pair<float, float>>                        m_pHackJitterXY  = {};
-    std::vector<std::unique_ptr<cauldron::EXRTextureDataBlock>> m_pHackColorData = {};
-    std::vector<std::unique_ptr<cauldron::EXRTextureDataBlock>> m_pHackMVData    = {};
-    std::vector<std::unique_ptr<cauldron::EXRTextureDataBlock>> m_pHackDepthData = {};
+    //std::vector<std::unique_ptr<cauldron::EXRTextureDataBlock>> m_pHackColorData = {};
+    //std::vector<std::unique_ptr<cauldron::EXRTextureDataBlock>> m_pHackMVData    = {};
+    //std::vector<std::unique_ptr<cauldron::EXRTextureDataBlock>> m_pHackDepthData = {};
+
+    std::vector<std::filesystem::path> m_hackColorPaths = {};
+    std::vector<std::filesystem::path> m_hackMVDPaths   = {};
     // see ExportDebugFrame()
     static constexpr size_t m_kSkipFramesInput = 0;
     static constexpr size_t m_kSkipFramesSR    = 1;

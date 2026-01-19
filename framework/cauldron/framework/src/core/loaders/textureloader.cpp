@@ -537,6 +537,43 @@ namespace cauldron
         return false;
     }
 
+    void EXRTextureDataBlock::CopyTextureData(void* pDest, uint32_t stride, uint32_t bytesWidth, uint32_t height, uint32_t readOffset)
+    {
+        for (uint32_t y = 0; y < height; ++y)
+            memcpy((char*)pDest + y * stride, m_pData + y * bytesWidth, bytesWidth);
+    }
+
+    bool EXRTextureDataBlock::DryLoadEXRInfo(const std::filesystem::path& textureFile)
+    {
+        // Initialize EXR structures
+        EXRVersion version;
+        EXRHeader  header;
+        InitEXRHeader(&header);
+        const char* err = nullptr;
+
+        // Parse EXR version
+        std::string fileName = textureFile.u8string();
+        int         ret      = ParseEXRVersionFromFile(&version, fileName.c_str());
+        if (ret != TINYEXR_SUCCESS)
+        {
+            CauldronError(L"Invalid EXR version: %s", fileName.c_str());
+        }
+
+        // Parse EXR header
+        ret = ParseEXRHeaderFromFile(&header, &version, fileName.c_str(), &err);
+        if (ret != TINYEXR_SUCCESS)
+        {
+            if (err)
+                CauldronError(L"EXR header error: %s", err);
+        }
+        // Update bucket
+        uint32_t width  = static_cast<uint32_t>(header.data_window.max_x - header.data_window.min_x + 1);
+        uint32_t height = static_cast<uint32_t>(header.data_window.max_y - header.data_window.min_y + 1);
+        AllSeenResolution.try_emplace({width, height}, textureFile.wstring());
+
+        return true;
+    }
+
     bool EXRTextureDataBlock::LoadColorData(const std::filesystem::path& textureFile)
     {
         // Very important: we support 3 formats for color targets
@@ -800,16 +837,11 @@ namespace cauldron
         m_pData = finalCharData;
 
         // 8. Update bucket
-        AllSeenResolution.try_emplace({image.width, image.height}, textureFile.wstring());
+        //AllSeenResolution.try_emplace({image.width, image.height}, textureFile.wstring());
 
         return true;
     }
 
-    void EXRTextureDataBlock::CopyTextureData(void* pDest, uint32_t stride, uint32_t bytesWidth, uint32_t height, uint32_t readOffset)
-    {
-        for (uint32_t y = 0; y < height; ++y)
-            memcpy((char*)pDest + y * stride, m_pData + y * bytesWidth, bytesWidth);
-    }
     std::unique_ptr<EXRTextureDataBlock> EXRTextureDataBlock::LoadMVandCreateDepth(const std::filesystem::path& textureFile)
     {
 
@@ -995,7 +1027,7 @@ namespace cauldron
         auto depthDataBlock = std::make_unique<EXRTextureDataBlock>(depthByteData);
 
         // Update bucket
-        AllSeenResolution.try_emplace({image.width, image.height}, textureFile.wstring());
+        //AllSeenResolution.try_emplace({image.width, image.height}, textureFile.wstring());
 
         return depthDataBlock;
     }

@@ -215,13 +215,6 @@ namespace cauldron
     class EXRTextureDataBlock : public TextureDataBlock
     {
     public:
-        enum class SpecialChannelType : int
-        {
-            ColorRGB = 0,       // format handled by SetResourceFormat()
-            MotionVectors = 1,  // RG16_FLOAT format
-            Depth = 2           // R32_FLOAT format
-        };
-
         // Use a map to detect inconsistent resolution. Its size will be 1 most of the times.
         static std::map<std::pair<uint32_t, uint32_t>, std::wstring> AllSeenResolution;
 
@@ -236,6 +229,13 @@ namespace cauldron
         virtual bool LoadTextureData(std::filesystem::path& textureFile, float alphaThreshold, TextureDesc& texDesc) override;
 
         virtual void CopyTextureData(void* pDest, uint32_t stride, uint32_t widthStride, uint32_t height, uint32_t sliceOffset) override;
+
+        /**
+         * Dry load EXR header only to populate AllSeenResolution.
+         * 
+         * \return 
+         */
+        static bool DryLoadEXRInfo(const std::filesystem::path& textureFile);
 
         /**
          * @brief Load frame buffer color data from a EXR file.

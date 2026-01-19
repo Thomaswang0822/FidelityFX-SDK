@@ -142,31 +142,8 @@ namespace fs = std::filesystem;
 
 void RestoreApplicationSwapChain(bool recreateSwapchain = true);
 
-/**
- * Instead of treating these exr files as Content Texture, we must read them directly
- * as Render Texture. The former is handled via TextureLoader and ContentManager, 
- * and the latter is handled via DynamicResourcePool.
- * We must use `void Texture::CopyData(TextureDataBlock* pTextureDataBlock)`, and this function
- * takes >40ms according to the debugger. Thus we must put it in init stage.
- * 
- * \return bool success?
- */
-bool FSRRenderModule::LoadHackTextures()
+bool FSRRenderModule::LoadHackTextureInfo()
 {
-    // first do a sanity check on those paths in HackOptions
-    for (const auto& inPath : hackOptions.hackPaths)
-        CauldronAssert(ASSERT_ERROR, fs::exists(inPath), L"Input folder %s deosn't exist", inPath.c_str());
-
-    if (hackOptions.storeOutput && !fs::exists(hackOptions.outPath)) {
-        // Defensive, in case path doesn't exist
-        CauldronWarning(L"Screenshot output dir DNE and will be created: %s", hackOptions.outPath.c_str());
-        fs::create_directory(hackOptions.outPath);
-    }
-
-    std::vector<std::filesystem::path> fpathColor;
-    std::vector<std::filesystem::path> fpathMVD;
-
-    size_t nTextures = hackOptions.outputFrameCount; // No. textures to load and run on.
     // Populate exr filepath lists and return count
     auto populatePathList = [](std::wstring folderPath, std::vector<std::filesystem::path>& outPaths) -> size_t {
         outPaths.clear();
@@ -182,30 +159,28 @@ bool FSRRenderModule::LoadHackTextures()
     };
 
     
-    if (populatePathList(hackOptions.hackPaths.front(), fpathColor) != hackOptions.frameCount)
+    if (populatePathList(hackOptions.hackPaths.front(), m_hackColorPaths) != hackOptions.frameCount)
         CauldronError(L"Color input file count mismatch with hackOptions.frameCount");
 
-    if (populatePathList(hackOptions.hackPaths.back(), fpathMVD) != hackOptions.frameCount)
+    if (populatePathList(hackOptions.hackPaths.back(), m_hackMVDPaths) != hackOptions.frameCount)
         CauldronError(L"MVD input file count mismatch with hackOptions.frameCount");
 
+    // Then truncate them
+    m_hackColorPaths = std::vector<std::filesystem::path>(m_hackColorPaths.begin(), m_hackColorPaths.begin() + hackOptions.outputFrameCount);
+    m_hackMVDPaths   = std::vector<std::filesystem::path>(m_hackMVDPaths.begin(), m_hackMVDPaths.begin() + hackOptions.outputFrameCount);
+
     if (hackOptions.parseJitter)
-        EXRTextureDataBlock::ParseJitter(fpathColor, m_pHackJitterXY);
+        EXRTextureDataBlock::ParseJitter(m_hackColorPaths, m_pHackJitterXY);
 
-    for (size_t frameIdx = 0; frameIdx < nTextures; ++frameIdx)
+    // Dry load headers to collect resolution info
+    for (const auto& fp : m_hackColorPaths)
     {
-        // Load Color
-        auto colorDB = std::make_unique<EXRTextureDataBlock>();
-        colorDB->LoadColorData(fpathColor[frameIdx]);
-        m_pHackColorData.push_back(std::move(colorDB));
-
-        // Load MV and Depth together
-        auto mvDB    = std::make_unique<EXRTextureDataBlock>();
-        auto depthDB = mvDB->LoadMVandCreateDepth(fpathMVD[frameIdx]);
-        m_pHackMVData.push_back(std::move(mvDB));
-        m_pHackDepthData.push_back(std::move(depthDB));
+        EXRTextureDataBlock::DryLoadEXRInfo(fp);
     }
-
-    CauldronAssert(ASSERT_ERROR, m_pHackColorData.size() == nTextures, L"Color hack target count mismatch");
+    for (const auto& fp : m_hackMVDPaths)
+    {
+        EXRTextureDataBlock::DryLoadEXRInfo(fp);
+    }
     
     //CheckHackColors("AfterLoad");
 
@@ -507,12 +482,12 @@ void FSRRenderModule::Init(const json& initData)
 
     /// So far under hack mode, display res has been set by cmdline/json parser.
     /// First set Custom mode in order to freely set m_UpscaleRatio (to be display/render resolution).
-    /// Then load hack textures. This func sets render res.
+    /// Then load hack texture info. This func sets render res. Actual hack data are loaded on-the-fly per frame.
     /// Finally, SwitchUpscaler() will compute m_UpscaleRatio as we want.
     if (hackOptions.enableHack)
     {
         m_ScalePreset = FSRScalePreset::Custom;
-        CauldronAssert(ASSERT_CRITICAL, LoadHackTextures(), L"Loading hack textures failed");
+        CauldronAssert(ASSERT_CRITICAL, LoadHackTextureInfo(), L"LoadHackTextureInfo() failed");
     }
 
     SwitchUpscaler(m_UiUpscaleMethod);
@@ -2375,9 +2350,17 @@ void FSRRenderModule::HackCopyDataCallback()
     }
 
     GetFramework()->SetRunningState(false);  // pause rendering while we copy data
-    m_pHackColorTarget->CopyData(m_pHackColorData[hackIdx].get());
-    m_pHackMV->CopyData(m_pHackMVData[hackIdx].get());
-    m_pHackDepth->CopyData(m_pHackDepthData[hackIdx].get());
+    // Load Color
+    auto colorDB = std::make_unique<EXRTextureDataBlock>();
+    colorDB->LoadColorData(m_hackColorPaths[hackIdx]);
+
+    // Load MV and Depth together
+    auto mvDB    = std::make_unique<EXRTextureDataBlock>();
+    auto depthDB = mvDB->LoadMVandCreateDepth(m_hackMVDPaths[hackIdx]);
+
+    m_pHackColorTarget->CopyData(colorDB.get());
+    m_pHackMV->CopyData(mvDB.get());
+    m_pHackDepth->CopyData(depthDB.get());
     GetFramework()->SetRunningState(true);  // and restore running state
 }
 

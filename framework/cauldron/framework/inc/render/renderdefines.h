@@ -634,7 +634,7 @@ namespace cauldron
             return { DisplayWidth, DisplayWidth };
         }
 
-        inline std::pair<uint32_t, uint32_t> yRenderResolution() const
+        inline std::pair<uint32_t, uint32_t> RenderResolution() const
         {
             return { RenderWidth, RenderHeight };
         }
