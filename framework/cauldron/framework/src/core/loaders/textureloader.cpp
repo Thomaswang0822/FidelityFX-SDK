@@ -810,7 +810,7 @@ namespace cauldron
         for (uint32_t y = 0; y < height; ++y)
             memcpy((char*)pDest + y * stride, m_pData + y * bytesWidth, bytesWidth);
     }
-    std::shared_ptr<EXRTextureDataBlock> EXRTextureDataBlock::LoadMVandCreateDepth(const std::filesystem::path& textureFile)
+    std::unique_ptr<EXRTextureDataBlock> EXRTextureDataBlock::LoadMVandCreateDepth(const std::filesystem::path& textureFile)
     {
 
         // Initialize EXR structures
@@ -992,7 +992,7 @@ namespace cauldron
         m_pData = mvByteData;
 
         // Create depth data block
-        auto depthDataBlock = std::make_shared<EXRTextureDataBlock>(depthByteData);
+        auto depthDataBlock = std::make_unique<EXRTextureDataBlock>(depthByteData);
 
         // Update bucket
         AllSeenResolution.try_emplace({image.width, image.height}, textureFile.wstring());

@@ -163,11 +163,8 @@ bool FSRRenderModule::LoadHackTextures()
         fs::create_directory(hackOptions.outPath);
     }
 
-    constexpr std::array<wchar_t*, 3> renderTargetNames = {L"CurrFrameHack", L"MvHack", L"DepthHack"};
-    // temporarily used
-    std::vector<std::vector<cauldron::Texture*>*> hackTargets = {&m_pHackColors, &m_pHackMVs, &m_pHackDepths};
-
-    std::vector<std::filesystem::path> exrFiles;
+    std::vector<std::filesystem::path> fpathColor;
+    std::vector<std::filesystem::path> fpathMVD;
 
     size_t nTextures = hackOptions.outputFrameCount; // No. textures to load and run on.
     // Populate exr filepath lists and return count
@@ -184,60 +181,32 @@ bool FSRRenderModule::LoadHackTextures()
         return outPaths.size();
     };
 
-    // Load Color
+    
+    if (populatePathList(hackOptions.hackPaths.front(), fpathColor) != hackOptions.frameCount)
+        CauldronError(L"Color input file count mismatch with hackOptions.frameCount");
+
+    if (populatePathList(hackOptions.hackPaths.back(), fpathMVD) != hackOptions.frameCount)
+        CauldronError(L"MVD input file count mismatch with hackOptions.frameCount");
+
+    if (hackOptions.parseJitter)
+        EXRTextureDataBlock::ParseJitter(fpathColor, m_pHackJitterXY);
+
+    for (size_t frameIdx = 0; frameIdx < nTextures; ++frameIdx)
     {
-        if (populatePathList(hackOptions.hackPaths.front(), exrFiles) != hackOptions.frameCount)
-            CauldronError(L"Color input file count mismatch with hackOptions.frameCount");
-        if (hackOptions.parseJitter)
-            EXRTextureDataBlock::ParseJitter(exrFiles, m_pHackJitterXY);
+        // Load Color
+        auto colorDB = std::make_unique<EXRTextureDataBlock>();
+        colorDB->LoadColorData(fpathColor[frameIdx]);
+        m_pHackColorData.push_back(std::move(colorDB));
 
-        TextureDesc dummyDesc = {};
-        for (size_t frameIdx = 0; frameIdx < nTextures; ++frameIdx)
-        {
-            // first get the render target
-            std::wstring rtFullname = renderTargetNames[0] + (L"_" + std::to_wstring(frameIdx));  // can't add 2 wchar_t*
-            m_pHackColors.push_back(const_cast<cauldron::Texture*>(GetFramework()->GetRenderTexture(rtFullname.c_str())));
-            CauldronAssert(ASSERT_ERROR, m_pHackColors.back() != nullptr, L"GetRenderTexture() on %s failed", rtFullname.c_str());
-
-            // create texture DB
-            auto colorDB = std::make_unique<EXRTextureDataBlock>();
-            //colorDB->SetResourceFormat(GetFramework()->GetSwapChain()->GetSwapChainFormat());
-            colorDB->LoadColorData(exrFiles[frameIdx]);
-            
-            // then copy
-            m_pHackColors.back()->CopyData(colorDB.get());
-        }
-
-        CauldronAssert(ASSERT_ERROR, m_pHackColors.size() == nTextures, L"Color hack target count mismatch");
+        // Load MV and Depth together
+        auto mvDB    = std::make_unique<EXRTextureDataBlock>();
+        auto depthDB = mvDB->LoadMVandCreateDepth(fpathMVD[frameIdx]);
+        m_pHackMVData.push_back(std::move(mvDB));
+        m_pHackDepthData.push_back(std::move(depthDB));
     }
 
-    // Load MV and Depth together
-    {
-        if (populatePathList(hackOptions.hackPaths.back(), exrFiles) != hackOptions.frameCount)
-            CauldronError(L"MVD input file count mismatch with hackOptions.frameCount");
-
-        for (size_t frameIdx = 0; frameIdx < nTextures; ++frameIdx)
-        {
-            // first get both render targets
-            std::wstring mvRTName    = renderTargetNames[1] + (L"_" + std::to_wstring(frameIdx));
-            std::wstring depthRTName = renderTargetNames[2] + (L"_" + std::to_wstring(frameIdx));
-            m_pHackMVs.push_back(const_cast<cauldron::Texture*>(GetFramework()->GetRenderTexture(mvRTName.c_str())));
-            m_pHackDepths.push_back(const_cast<cauldron::Texture*>(GetFramework()->GetRenderTexture(depthRTName.c_str())));
-            CauldronAssert(ASSERT_ERROR, m_pHackMVs.back() != nullptr, L"GetRenderTexture() on %s failed", mvRTName.c_str());
-            CauldronAssert(ASSERT_ERROR, m_pHackDepths.back() != nullptr, L"GetRenderTexture() on %s failed", depthRTName.c_str());
-
-            // create texture DB
-            auto mvDB = std::make_unique<EXRTextureDataBlock>();
-            auto depthDB = mvDB->LoadMVandCreateDepth(exrFiles[frameIdx]);
-
-            // then copy
-            m_pHackMVs.back()->CopyData(mvDB.get());
-            m_pHackDepths.back()->CopyData(depthDB.get());
-        }
-
-        CauldronAssert(ASSERT_ERROR, m_pHackMVs.size() == nTextures && m_pHackDepths.size() == nTextures, L"MVD hack target count mismatch");
-    }
-
+    CauldronAssert(ASSERT_ERROR, m_pHackColorData.size() == nTextures, L"Color hack target count mismatch");
+    
     //CheckHackColors("AfterLoad");
 
     // Ensure all exr inputs have same resolution and force write to Framework resolution info (render res)
@@ -277,6 +246,15 @@ void FSRRenderModule::Init(const json& initData)
     m_pReactiveMask          = GetFramework()->GetRenderTexture(L"ReactiveMask");
     m_pCompositionMask       = GetFramework()->GetRenderTexture(L"TransCompMask");
     CauldronAssert(ASSERT_CRITICAL, m_pMotionVectors && m_pDistortionField[0] && m_pDistortionField[1] && m_pReactiveMask && m_pCompositionMask, L"Could not get one of the needed resources for FSR Rendermodule.");
+
+    // Fetch hack resources
+    std::array<Texture**, 3> hackRTs = {&m_pHackColorTarget, &m_pHackMV, &m_pHackDepth};
+    if (hackOptions.enableHack) {
+        for (auto i = 0; i < HackRTNames.size(); ++i) {
+            *hackRTs[i] = const_cast<cauldron::Texture*>(GetFramework() -> GetRenderTexture(HackRTNames[i]));
+            CauldronAssert(ASSERT_CRITICAL, *hackRTs[i] != nullptr, L"GetRenderTexture() on %s failed", HackRTNames[i]);
+        }
+    }
 
     // Get a CPU resource view that we'll use to map the render target to
     GetResourceViewAllocator()->AllocateCPURenderViews(&m_pRTResourceView);
@@ -328,9 +306,7 @@ void FSRRenderModule::Init(const json& initData)
     m_RasterViews[1] = GetRasterViewAllocator()->RequestRasterView(m_pCompositionMask, ViewDimension::Texture2D);
 
     // Set our render resolution function as that to use during resize to get render width/height from display width/height
-    m_pUpdateFunc = 
-        
-        [this](uint32_t displayWidth, uint32_t displayHeight) { return this->UpdateResolution(displayWidth, displayHeight); };
+    m_pUpdateFunc = [this](uint32_t displayWidth, uint32_t displayHeight) { return this->UpdateResolution(displayWidth, displayHeight); };
 
     //////////////////////////////////////////////////////////////////////////
     // Register additional execution callbacks during the frame
@@ -348,6 +324,15 @@ void FSRRenderModule::Init(const json& initData)
     };
     ExecutionTuple callbackPostTransTuple = std::make_pair(L"FSRRenderModule::PostTransCallback", std::make_pair(this, callbackPostTrans));
     GetFramework()->RegisterExecutionCallback(L"TranslucencyRenderModule", false, callbackPostTransTuple);
+
+    // Register a copy-data callback before Execute() for hacking
+    ExecuteCallback callbackHackCopyData = [this](double deltaTime, CommandList* pCmdList) {
+        std::function<void(void*)> hackCopyData = [this](void*) { this->HackCopyDataCallback(); };
+        Task                       hackCopyDataTask(hackCopyData, nullptr, nullptr);
+        GetTaskManager()->AddTask(hackCopyDataTask);
+    };
+    ExecutionTuple callbackHackCopyDataTuple = std::make_pair(L"FSRRenderModule::HackCopyDataCallback", std::make_pair(this, callbackHackCopyData));
+    GetFramework()->RegisterExecutionCallback(L"FSRApiRenderModule", true /* bool preInsertion */, callbackHackCopyDataTuple);
 
     m_curUiTextureIndex     = 0;
     
@@ -1820,12 +1805,12 @@ void FSRRenderModule::OnPreFrame()
 
 bool FSRRenderModule::DebugCheck(std::string marker)
 {
-    if (m_pHackColors.empty())
+    if (m_pHackColorTarget == nullptr)
         return true;
 
     auto origFrameID = m_FrameID;
     m_FrameID         = 15;
-    auto hackTexture  = m_pHackColors.front()->GetResource();
+    auto hackTexture  = m_pHackColorTarget->GetResource();
     auto currentState = hackTexture->GetCurrentResourceState();
     bool success = ExportDebugFrame(SDKWrapper::ffxGetResourceApi(hackTexture, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ), m_kSkipFramesInput, marker);
     m_FrameID = origFrameID;
@@ -1886,18 +1871,16 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
     const auto& depthDesc = m_pDepthTarget->GetDesc();
     if (hackOptions.enableHack)
     {
-        const auto& hackColorDesc = m_pHackColors[0]->GetDesc();
-        const auto& hackMVDesc    = m_pHackMVs[0]->GetDesc();
-        const auto& hackDepthDesc = m_pHackDepths[0]->GetDesc();
+        const auto& hackColorDesc = m_pHackColorTarget->GetDesc();
+        const auto& hackMVDesc    = m_pHackMV->GetDesc();
+        const auto& hackDepthDesc = m_pHackDepth->GetDesc();
         
         bool check = hasSameSize(colorDesc, hackColorDesc) && hasSameSize(mvDesc, hackMVDesc) && hasSameSize(depthDesc, hackDepthDesc);
     }
     {
         std::vector<Barrier> barriers;
-        barriers.push_back(Barrier::Transition(
-            m_pTempTexture->GetResource(), ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource, ResourceState::CopyDest));
-        barriers.push_back(Barrier::Transition(
-            m_pColorTarget->GetResource(), ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource, ResourceState::CopySource));
+        barriers.push_back(Barrier::Transition(m_pTempTexture->GetResource(), ResourceState::ShaderResource, ResourceState::CopyDest));
+        barriers.push_back(Barrier::Transition(m_pColorTarget->GetResource(), ResourceState::ShaderResource, ResourceState::CopySource));
         ResourceBarrier(pCmdList, static_cast<uint32_t>(barriers.size()), barriers.data());
     }
 
@@ -1910,10 +1893,8 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
 
     {
         std::vector<Barrier> barriers;
-        barriers.push_back(Barrier::Transition(
-            m_pTempTexture->GetResource(), ResourceState::CopyDest, ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource));
-        barriers.push_back(Barrier::Transition(
-            m_pColorTarget->GetResource(), ResourceState::CopySource, ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource));
+        barriers.push_back(Barrier::Transition(m_pTempTexture->GetResource(), ResourceState::CopyDest, ResourceState::ShaderResource));
+        barriers.push_back(Barrier::Transition(m_pColorTarget->GetResource(), ResourceState::CopySource, ResourceState::ShaderResource));
         ResourceBarrier(pCmdList, static_cast<uint32_t>(barriers.size()), barriers.data());
     }
 
@@ -1929,22 +1910,17 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
         const_cast<HackOptionDef&>(hackOptions).identifier     = "DefaultSceneBB";
         const_cast<HackOptionDef&>(hackOptions).outPath        = L"../media/EmptySanityCheck/Horizontal/outputs";
     }
-    uint64_t hackIdx = 0;
-    if (hackOptions.enableHack)
-    {
-        // loop thru hacking textures depending on frameID
-        hackIdx          = m_FrameID % m_pHackColors.size();
-        if (hackOptions.parseJitter)
-        {
-            m_JitterX = m_pHackJitterXY[hackIdx].first;
-            m_JitterY = m_pHackJitterXY[hackIdx].second;
-        }
-    }
+    uint64_t hackIdx = m_FrameID % hackOptions.outputFrameCount;
+    //if (hackOptions.enableHack && hackOptions.parseJitter)
+    //{
+    //    m_JitterX = m_pHackJitterXY[hackIdx].first;
+    //    m_JitterY = m_pHackJitterXY[hackIdx].second;
+    //}
 
     /// Before any FSR dispatch, we can export any FSR input.
     if (false)  // manually turn on/off
     {
-        auto hackTexture   = m_pHackColors[m_FrameID % m_pHackColors.size()]->GetResource();
+        auto hackTexture   = m_pHackColorTarget->GetResource();
         //auto hackTexture  = m_pTempTexture->GetResource();
         auto currentState = hackTexture->GetCurrentResourceState();
         bool exportSuccess =
@@ -1963,19 +1939,16 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
             // copy hackColor to colorTarget
             std::vector<Barrier> barriers;
             barriers.push_back(Barrier::Transition(
-                m_pColorTarget->GetResource(), ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource, ResourceState::CopyDest));
-            barriers.push_back(Barrier::Transition(
-                m_pHackColors[hackIdx]->GetResource(), ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource, ResourceState::CopySource));
+                m_pColorTarget->GetResource(), ResourceState::ShaderResource, ResourceState::CopyDest));
+            barriers.push_back(Barrier::Transition(m_pHackColorTarget->GetResource(), ResourceState::ShaderResource, ResourceState::CopySource));
             ResourceBarrier(pCmdList, static_cast<uint32_t>(barriers.size()), barriers.data());
 
-            TextureCopyDesc desc(m_pHackColors[hackIdx]->GetResource(), m_pColorTarget->GetResource());
+            TextureCopyDesc desc(m_pHackColorTarget->GetResource(), m_pColorTarget->GetResource());
             CopyTextureRegion(pCmdList, &desc);
 
             barriers.clear();
-            barriers.push_back(Barrier::Transition(
-                m_pColorTarget->GetResource(), ResourceState::CopyDest, ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource));
-            barriers.push_back(Barrier::Transition(
-                m_pHackColors[hackIdx]->GetResource(), ResourceState::CopySource, ResourceState::NonPixelShaderResource | ResourceState::PixelShaderResource));
+            barriers.push_back(Barrier::Transition(m_pColorTarget->GetResource(), ResourceState::CopyDest, ResourceState::ShaderResource));
+            barriers.push_back(Barrier::Transition(m_pHackColorTarget->GetResource(), ResourceState::CopySource, ResourceState::ShaderResource));
             ResourceBarrier(pCmdList, static_cast<uint32_t>(barriers.size()), barriers.data());
         }
 
@@ -1995,9 +1968,9 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
 
         if (hackOptions.enableHack)
         {
-            dispatchUpscale.color         = SDKWrapper::ffxGetResourceApi(m_pHackColors[hackIdx]->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-            dispatchUpscale.depth         = SDKWrapper::ffxGetResourceApi(m_pHackDepths[hackIdx]->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-            dispatchUpscale.motionVectors = SDKWrapper::ffxGetResourceApi(m_pHackMVs[hackIdx]->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+            dispatchUpscale.color         = SDKWrapper::ffxGetResourceApi(m_pHackColorTarget->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+            dispatchUpscale.depth         = SDKWrapper::ffxGetResourceApi(m_pHackDepth->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+            dispatchUpscale.motionVectors = SDKWrapper::ffxGetResourceApi(m_pHackMV->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
         }
         else
         {
@@ -2086,8 +2059,8 @@ void FSRRenderModule::Execute(double deltaTime, CommandList* pCmdList)
 
         if (hackOptions.enableHack)
         {
-            dispatchFgPrep.depth         = SDKWrapper::ffxGetResourceApi(m_pHackDepths[hackIdx]->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-            dispatchFgPrep.motionVectors = SDKWrapper::ffxGetResourceApi(m_pHackMVs[hackIdx]->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+            dispatchFgPrep.depth         = SDKWrapper::ffxGetResourceApi(m_pHackDepth->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+            dispatchFgPrep.motionVectors = SDKWrapper::ffxGetResourceApi(m_pHackMV->GetResource(), FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
         }
         else
         {
@@ -2389,6 +2362,23 @@ void FSRRenderModule::PostTransCallback(double deltaTime, CommandList* pCmdList)
 
     // FidelityFX contexts modify the set resource view heaps, so set the cauldron one back
     SetAllResourceViewHeaps(pCmdList);
+}
+
+void FSRRenderModule::HackCopyDataCallback()
+{
+    if (!hackOptions.enableHack)
+        return;
+
+    uint64_t hackIdx = m_FrameID % hackOptions.outputFrameCount;
+    if (hackOptions.parseJitter)
+    {
+        m_JitterX = m_pHackJitterXY[hackIdx].first;
+        m_JitterY = m_pHackJitterXY[hackIdx].second;
+    }
+
+    m_pHackColorTarget->CopyData(m_pHackColorData[hackIdx].get());
+    m_pHackMV->CopyData(m_pHackMVData[hackIdx].get());
+    m_pHackDepth->CopyData(m_pHackDepthData[hackIdx].get());
 }
 
 // Copy of ffxRestoreApplicationSwapChain from backend_interface, which is not built for this sample.

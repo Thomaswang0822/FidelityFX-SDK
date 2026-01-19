@@ -96,11 +96,11 @@
         "HackOptions": {
             "EnableHack": true,
             "DisplayResolution": 4,
-            "HackPaths": "../media/DEBUG_SCENE",
+            "HackPaths": "../media/TEST_SCENE",
             "ParseJitter": true,
-            "StoreOutput": true,
-            "OutputPath": "../media/DEBUG_SCENE/outputs",
-            "OutputFrameCount": 60,
+            "StoreOutput": false,
+            "OutputPath": "../media/TEST_SCENE/outputs",
+            "OutputFrameCount": 10,
             "AlignFilename": true,
             "Identifier": "Whatever"
         }

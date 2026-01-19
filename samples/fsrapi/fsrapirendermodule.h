@@ -80,6 +80,13 @@ public:
     void Execute(double deltaTime, cauldron::CommandList* pCmdList) override;
     void PreTransCallback(double deltaTime, cauldron::CommandList* pCmdList);
     void PostTransCallback(double deltaTime, cauldron::CommandList* pCmdList);
+    /**
+     * @brief   Copy data from those EXRTextureDataBlock to m_pHackColorTarget, m_pHackMV, and m_pHackDepth.
+     * 
+     * This should be done per-frame before Execute().
+     * 
+     */
+    void HackCopyDataCallback();
 
     /**
      * @brief   Recreate the FSR API Context to resize internal resources. Called by the framework when the resolution changes.
@@ -275,7 +282,7 @@ private:
     bool m_DrawFrameGenerationDebugTearLines        = false;
     bool m_DrawFrameGenerationDebugResetIndicators  = false;
     bool m_DrawFrameGenerationDebugPacingLines      = false;
-    bool m_DrawFrameGenerationDebugView             = false;
+    bool m_DrawFrameGenerationDebugView             = true;
     bool m_DrawUpscalerDebugView                    = false;
     bool m_PresentInterpolatedOnly                  = true;
     bool m_SimulatePresentSkip                      = false;
@@ -313,14 +320,18 @@ private:
     // Reference to the HackOptions stored in Framework, init in constructor
     const cauldron::HackOptionDef& hackOptions;
     // and our hacking data: input {frame_t_color, motion vectors, depth} textures
-    std::vector<cauldron::Texture*> m_pHackColors = {};
-    std::vector<cauldron::Texture*> m_pHackMVs    = {};
-    std::vector<cauldron::Texture*> m_pHackDepths = {};
-    std::vector<std::pair<float, float>> m_pHackJitterXY = {};
+    cauldron::Texture* m_pHackColorTarget = nullptr;
+    cauldron::Texture* m_pHackMV          = nullptr;
+    cauldron::Texture* m_pHackDepth       = nullptr;
+    // finally the data storage
+    std::vector<std::pair<float, float>>                        m_pHackJitterXY  = {};
+    std::vector<std::unique_ptr<cauldron::EXRTextureDataBlock>> m_pHackColorData = {};
+    std::vector<std::unique_ptr<cauldron::EXRTextureDataBlock>> m_pHackMVData    = {};
+    std::vector<std::unique_ptr<cauldron::EXRTextureDataBlock>> m_pHackDepthData = {};
     // see ExportDebugFrame()
-    static constexpr size_t   m_kSkipFramesInput       = 0;
-    static constexpr size_t   m_kSkipFramesSR          = 1;
-    static constexpr size_t   m_kSkipFramesFG          = 3;
+    static constexpr size_t m_kSkipFramesInput = 0;
+    static constexpr size_t m_kSkipFramesSR    = 1;
+    static constexpr size_t m_kSkipFramesFG    = 3;
 
     // Raster views for reactive/composition masks
     std::vector<const cauldron::RasterView*> m_RasterViews           = {};

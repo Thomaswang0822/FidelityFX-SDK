@@ -253,7 +253,7 @@ namespace cauldron
          * @param textureFile    Path to the EXR file
          * @return a new EXRTextureDataBlock shared_ptr storing depth data.
          */
-        std::shared_ptr<EXRTextureDataBlock> LoadMVandCreateDepth(const std::filesystem::path& textureFile);
+        std::unique_ptr<EXRTextureDataBlock> LoadMVandCreateDepth(const std::filesystem::path& textureFile);
 
         /**
          * @brief Given a list of all exr file paths, extract jitter from filename and store to output vector

@@ -157,6 +157,8 @@ namespace cauldron
         { 4, {3840, 2160} },
     };
 
+    static inline constexpr std::array<wchar_t*, 3> HackRTNames = {L"ColorHack", L"MvHack", L"DepthHack"};
+
     /**
      * @struct CauldronConfig
      *

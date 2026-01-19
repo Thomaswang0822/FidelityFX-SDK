@@ -327,7 +327,7 @@ namespace cauldron
             pClearValue = &clearValue;
         }
 
-        if (m_Name == L"CurrFrameHack_0")
+        if (m_Name == L"ColorHack")
         {
             auto fsrapiRM = GetFramework()->GetRenderModule("FSRApiRenderModule");
             if (false && fsrapiRM && fsrapiRM->ModuleEnabled())

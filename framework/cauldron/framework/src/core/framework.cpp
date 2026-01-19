@@ -2394,12 +2394,16 @@ namespace cauldron
             CauldronAssert(ASSERT_CRITICAL, pRenderTarget, L"Could not create render target %ls", texName.c_str());
         }
 
-        /// Finally we create nTargets of each type of Render targets.
+        /// Finally we create ONE of each type of hack Render targets.
         /// Note that we DO NOT add them to hashmap RenderResources and let the while loop create them
-        /// because we should make them not resizable.
-        const auto                        nTargets          = m_Config.HackOptions.outputFrameCount;
-        const std::vector<std::wstring>   renderTargetNames = {L"CurrFrameHack", L"MvHack", L"DepthHack"};
-        const std::vector<ResourceFormat> formats           = {m_Config.SwapChainFormat, ResourceFormat::RG16_FLOAT, ResourceFormat::D32_FLOAT};
+        /// because we should make them NOT resizable.
+        const std::array<ResourceFormat, 3> rtFormats = {m_Config.SwapChainFormat, ResourceFormat::RG16_FLOAT, ResourceFormat::D32_FLOAT};
+        const std::array<ResourceFlags, 3> rtFlags = {
+            ResourceFlags::AllowRenderTarget | ResourceFlags::AllowUnorderedAccess,
+            ResourceFlags::AllowRenderTarget,
+            ResourceFlags::AllowDepthStencil
+        };
+        
         // Will reuse it
         TextureDesc desc;
         desc.Width            = m_ResolutionInfo.DisplayWidth;
@@ -2407,29 +2411,15 @@ namespace cauldron
         desc.Dimension        = TextureDimension::Texture2D;
         desc.DepthOrArraySize = 1;
         desc.MipLevels        = 1;
-
-        for (size_t type = 0; type < renderTargetNames.size(); type++)
+        for (size_t type = 0; type < HackRTNames.size(); type++)
         {
-            desc.Format = formats[type];
-            if (IsDepth(desc.Format))
-                desc.Flags = ResourceFlags::AllowDepthStencil;
-            else
-                desc.Flags = ResourceFlags::AllowRenderTarget;
+            desc.Name   = HackRTNames[type];
+            desc.Format = rtFormats[type];
+            desc.Flags  = rtFlags[type];
 
-            bool allowUAV = (type == 0);  // only the hack color allows UAV
-            if (allowUAV)
-                desc.Flags = static_cast<ResourceFlags>(desc.Flags | ResourceFlags::AllowUnorderedAccess);
-
-            for (size_t i = 0; i < nTargets; ++i)
-            {
-                std::wstring fullname = renderTargetNames[type] + L"_" + std::to_wstring(i);
-                desc.Name = fullname;
-
-                const Texture* pHackTarget = m_pDynamicResourcePool->CreateRenderTexture(&desc, nullptr);
-                CauldronAssert(ASSERT_ERROR, pHackTarget, L"Could not create Hack target %ls", fullname);
-            }
-        }  // end of hacking render targets creation
-
+            const Texture* pHackTarget = m_pDynamicResourcePool->CreateRenderTexture(&desc, nullptr);
+            CauldronAssert(ASSERT_ERROR, pHackTarget, L"Could not create Hack target %ls", desc.Name);
+        }
         
         return 0;
     }
