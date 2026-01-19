@@ -327,9 +327,7 @@ void FSRRenderModule::Init(const json& initData)
 
     // Register a copy-data callback before Execute() for hacking
     ExecuteCallback callbackHackCopyData = [this](double deltaTime, CommandList* pCmdList) {
-        std::function<void(void*)> hackCopyData = [this](void*) { this->HackCopyDataCallback(); };
-        Task                       hackCopyDataTask(hackCopyData, nullptr, nullptr);
-        GetTaskManager()->AddTask(hackCopyDataTask);
+        this->HackCopyDataCallback();
     };
     ExecutionTuple callbackHackCopyDataTuple = std::make_pair(L"FSRRenderModule::HackCopyDataCallback", std::make_pair(this, callbackHackCopyData));
     GetFramework()->RegisterExecutionCallback(L"FSRApiRenderModule", true /* bool preInsertion */, callbackHackCopyDataTuple);
@@ -2376,9 +2374,11 @@ void FSRRenderModule::HackCopyDataCallback()
         m_JitterY = m_pHackJitterXY[hackIdx].second;
     }
 
+    GetFramework()->SetRunningState(false);  // pause rendering while we copy data
     m_pHackColorTarget->CopyData(m_pHackColorData[hackIdx].get());
     m_pHackMV->CopyData(m_pHackMVData[hackIdx].get());
     m_pHackDepth->CopyData(m_pHackDepthData[hackIdx].get());
+    GetFramework()->SetRunningState(true);  // and restore running state
 }
 
 // Copy of ffxRestoreApplicationSwapChain from backend_interface, which is not built for this sample.

@@ -670,17 +670,17 @@ namespace cauldron
         /**
          * @brief   Gets the current aspect ratio for the application display.
          */
-        float    GetAspectRatio() const { return m_ResolutionInfo.GetDisplayAspectRatio(); }
+        float GetAspectRatio() const { return m_ResolutionInfo.GetDisplayAspectRatio(); }
 
         /**
          * @brief   Gets parameters needed by upscalers.
          */
-        void     GetUpscaledRenderInfo(uint32_t& width, uint32_t& height, float& renderWidthRatio, float& renderHeightRatio) const;
+        void GetUpscaledRenderInfo(uint32_t& width, uint32_t& height, float& renderWidthRatio, float& renderHeightRatio) const;
 
         /**
          * @brief   Gets the current frame time slice.
          */
-        double   GetDeltaTime() const { return m_DeltaTime; }
+        double GetDeltaTime() const { return m_DeltaTime; }
 
         /**
          * @brief   Gets the current frame ID.
@@ -690,7 +690,9 @@ namespace cauldron
         /**
          * @brief   Query whether the sample is currently running.
          */
-        bool     IsRunning() const { return m_Running.load(); }
+        bool IsRunning() const { return m_Running.load(); }
+
+        void SetRunningState(bool running) { return m_Running.store(running); }
 
         /**
          * @brief   Fetches the main thread's ID. Used to enforce performance warnings on select functionality.
