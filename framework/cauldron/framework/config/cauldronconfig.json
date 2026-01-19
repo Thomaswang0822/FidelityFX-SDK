@@ -95,16 +95,12 @@
 
         "HackOptions": {
             "EnableHack": true,
-            "DisplayResolution": 1,
-            "HackPathssssss": [
-                "../media/EmptySanityCheck60/Vertical",
-                "../media/EmptySanityCheck60/Vertical/outputs"
-            ],
-            "HackPaths": "../media/TEST_SCENE",
+            "DisplayResolution": 4,
+            "HackPaths": "../media/DEBUG_SCENE",
             "ParseJitter": true,
-            "StoreOutput": false,
-            "OutputPath": "../media/TEST_SCENE/outputs",
-            "OutputFrameCount": 15,
+            "StoreOutput": true,
+            "OutputPath": "../media/DEBUG_SCENE/outputs",
+            "OutputFrameCount": 60,
             "AlignFilename": true,
             "Identifier": "Whatever"
         }

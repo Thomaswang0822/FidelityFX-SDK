@@ -2397,7 +2397,7 @@ namespace cauldron
         /// Finally we create nTargets of each type of Render targets.
         /// Note that we DO NOT add them to hashmap RenderResources and let the while loop create them
         /// because we should make them not resizable.
-        const auto                        nTargets          = m_Config.HackOptions.frameCount;
+        const auto                        nTargets          = m_Config.HackOptions.outputFrameCount;
         const std::vector<std::wstring>   renderTargetNames = {L"CurrFrameHack", L"MvHack", L"DepthHack"};
         const std::vector<ResourceFormat> formats           = {m_Config.SwapChainFormat, ResourceFormat::RG16_FLOAT, ResourceFormat::D32_FLOAT};
         // Will reuse it
